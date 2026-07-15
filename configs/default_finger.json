@@ -1,0 +1,52 @@
+{
+  "width_mm": 18.0,
+  "height_mm": 16.0,
+  "rotation_deg": 0.0,
+  "skin_thickness_mm": 0.6,
+  "fat_thickness_mm": 1.8,
+  "conductivities": {
+    "skin_s_m": 0.2,
+    "fat_s_m": 0.08,
+    "muscle_s_m": 0.36,
+    "bone_s_m": 0.04,
+    "ligament_s_m": 0.16
+  },
+  "bone": {
+    "center_x_mm": 0.0,
+    "center_y_mm": 0.6,
+    "radius_x_mm": 2.7,
+    "radius_y_mm": 2.2,
+    "rotation_deg": -8.0
+  },
+  "ligaments": [
+    {"center_x_mm": 0.0, "center_y_mm": -4.0, "radius_x_mm": 2.2, "radius_y_mm": 1.15, "rotation_deg": 4.0},
+    {"center_x_mm": 0.0, "center_y_mm": 4.1, "radius_x_mm": 2.0, "radius_y_mm": 0.85, "rotation_deg": -3.0}
+  ],
+  "arteries": [
+    {
+      "center_x_mm": -3.4,
+      "center_y_mm": -1.5,
+      "radius_x_mm": 0.65,
+      "radius_y_mm": 0.55,
+      "rotation_deg": 8.0,
+      "baseline_conductivity_s_m": 0.7,
+      "peak_delta_s_m": 0.06,
+      "waveform_scale": 1.0,
+      "phase_delay_fraction": 0.0
+    },
+    {
+      "center_x_mm": 3.4,
+      "center_y_mm": -2.0,
+      "radius_x_mm": 0.72,
+      "radius_y_mm": 0.6,
+      "rotation_deg": -12.0,
+      "baseline_conductivity_s_m": 0.7,
+      "peak_delta_s_m": 0.055,
+      "waveform_scale": 1.0,
+      "phase_delay_fraction": 0.0
+    }
+  ],
+  "muscle_diffusion_fraction": 0.12,
+  "muscle_diffusion_length_mm": 1.25
+}
+
