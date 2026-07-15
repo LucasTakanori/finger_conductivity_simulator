@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; font-family: 'Inter', system-ui, sans-serif; color: #13233B; }
+    #wrap { position: relative; width: 100%; }
+    #field, #overlay { position: absolute; top: 0; left: 0; border-radius: 14px; }
+    #overlay { cursor: crosshair; touch-action: none; }
+    #tip {
+      position: absolute; pointer-events: none; z-index: 5; display: none;
+      background: #13233B; color: #fff; font-size: 12px; line-height: 1.3;
+      padding: 6px 9px; border-radius: 8px; white-space: nowrap;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    }
+    #tip b { font-family: 'IBM Plex Mono', monospace; }
+    #backend {
+      position: absolute; right: 10px; bottom: 8px; z-index: 5;
+      font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.08em;
+      color: #5B6B7F; background: rgba(255,255,255,0.7); padding: 2px 7px; border-radius: 6px;
+    }
+    #hint {
+      position: absolute; left: 10px; top: 8px; z-index: 5;
+      font-size: 11px; color: #5B6B7F; background: rgba(255,255,255,0.75);
+      padding: 3px 8px; border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="field"></canvas>
+    <canvas id="overlay"></canvas>
+    <div id="hint">Drag tissues to reshape · hover to identify</div>
+    <div id="tip"></div>
+    <div id="backend">init…</div>
+  </div>
+  <script type="module" src="finger_canvas.js"></script>
+</body>
+</html>
