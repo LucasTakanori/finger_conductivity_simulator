@@ -79,7 +79,8 @@ rasterization implementations.
 
 ### Mesh and export
 
-- Bundled US120 and US140 inverse, forward, mapping, and provenance files.
+- All 38 b035/b045 ring variants, plus subject-selected US120 and US140 aliases,
+  with inverse, forward, mapping, and provenance files.
 - Element-centroid tissue projection.
 - Interactive mesh preview.
 - NPZ export and reproducible CLI export.
@@ -178,4 +179,3 @@ provenance.
 3. **v0.3:** PVI forward-solver adapter and voltage/noise generation.
 4. **v0.4:** multi-mesh dataset manifest and grouped splits.
 5. **v1.0:** documented phantom validation and stable 2D_GCNM handoff.
-

@@ -21,7 +21,8 @@ not tied to an HPC cluster.
 - A configurable muscle-only pulse halo. Skin, fat, bone, and ligament/tendon
   are explicitly excluded from diffusion.
 - Animated absolute and differential conductivity maps.
-- Projection onto bundled US120 and US140 PVI FEM meshes.
+- Projection onto all 38 PVI FEM mesh variants from the b035/b045 collections,
+  plus the subject-selected US120 and US140 aliases.
 - Versioned NPZ export with the arrays expected by a 2D_GCNM data adapter.
 - A command-line exporter for reproducible dataset generation.
 
@@ -131,9 +132,9 @@ tests/                      Lightweight scientific invariants
   out-of-plane current require a future 3D forward model.
 - The exported conductivity is a clean simulation target. It is not a PVI
   Newton reconstruction and should not be described as measured anatomy.
-- US120 is confirmed for subject 006. The bundled US140 subject-001 selection
+- The generic b035/b045 choices are ring-size candidates, not subject labels.
+  US120 is confirmed for subject 006. The bundled US140 subject-001 selection
   remains estimated; its manifest preserves that warning.
 
 See [the implementation plan](docs/PLAN.md) before using the app as a dataset
 factory for finger-agnostic GCNM training.
-

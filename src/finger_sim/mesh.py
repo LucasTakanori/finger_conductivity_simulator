@@ -37,7 +37,14 @@ def discover_meshes(root: Path | None = None) -> dict[str, Path]:
     root = root or bundled_mesh_root()
     meshes: dict[str, Path] = {}
     for path in sorted(root.glob("**/*_inv.h5")):
-        meshes[path.parent.name] = path
+        relative = path.parent.relative_to(root)
+        parts = relative.parts
+        if parts and parts[0] == "collections":
+            parts = parts[1:]
+        mesh_id = "_".join(parts)
+        if mesh_id in meshes:
+            raise ValueError(f"duplicate bundled mesh ID: {mesh_id}")
+        meshes[mesh_id] = path
     return meshes
 
 
