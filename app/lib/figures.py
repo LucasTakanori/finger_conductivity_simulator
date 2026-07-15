@@ -177,6 +177,10 @@ def pulse_figure(
         zmid, colorscale = None, palette.ABSOLUTE_SCALE
         map_title = "Absolute conductivity σ = σ₀ + Δσ"
 
+    # Heartbeat Δσ is intentionally zero at frame 0. Opening on the pulse peak
+    # makes the spatial field visible immediately instead of looking broken.
+    initial_index = int(np.nanargmax(np.abs(result.waveform)))
+
     figure = make_subplots(
         rows=2,
         cols=1,
@@ -200,7 +204,7 @@ def pulse_figure(
     )
     figure.add_trace(
         go.Scatter(
-            x=[result.time_s[0], result.time_s[0]],
+            x=[result.time_s[initial_index], result.time_s[initial_index]],
             y=[float(np.nanmin(result.waveform)), float(np.nanmax(result.waveform))],
             mode="lines",
             line={"color": palette.INK, "width": 2, "dash": "dot"},
@@ -211,19 +215,38 @@ def pulse_figure(
         col=1,
     )
     figure.add_trace(
-        _heatmap(source[0].reshape(shape), result, colorscale, zmin, zmax, zmid, "S/m"),
+        _heatmap(source[initial_index].reshape(shape), result, colorscale, zmin, zmax, zmid, "S/m"),
         row=2,
         col=1,
     )
 
     ymin = float(np.nanmin(result.waveform))
     ymax = float(np.nanmax(result.waveform))
+
+    def animated_map(index: int) -> go.Heatmap:
+        trace = _heatmap(
+            source[index].reshape(shape),
+            result,
+            colorscale,
+            zmin,
+            zmax,
+            zmid,
+            "S/m",
+        )
+        trace.update(xaxis="x2", yaxis="y2")
+        return trace
+
     figure.frames = [
         go.Frame(
             name=str(i),
             data=[
-                go.Scatter(x=[result.time_s[i], result.time_s[i]], y=[ymin, ymax]),
-                _heatmap(source[i].reshape(shape), result, colorscale, zmin, zmax, zmid, "S/m"),
+                go.Scatter(
+                    x=[result.time_s[i], result.time_s[i]],
+                    y=[ymin, ymax],
+                    xaxis="x",
+                    yaxis="y",
+                ),
+                animated_map(i),
             ],
             traces=[1, 2],
         )
@@ -245,7 +268,14 @@ def pulse_figure(
                 "x": 0.0,
                 "y": -0.04,
                 "buttons": [
-                    {"label": "▶ Play", "method": "animate", "args": [None, {"frame": {"duration": 70, "redraw": True}, "fromcurrent": True}]},
+                    {
+                        "label": "▶ Play",
+                        "method": "animate",
+                        "args": [
+                            [str(i) for i in range(len(source))],
+                            {"frame": {"duration": 70, "redraw": True}, "fromcurrent": False},
+                        ],
+                    },
                     {"label": "⏸ Pause", "method": "animate", "args": [[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate"}]},
                 ],
             }
@@ -258,7 +288,7 @@ def pulse_figure(
         margin={"l": 20, "r": 20, "t": 45, "b": 110},
         showlegend=False,
         sliders=[{
-            "active": 0,
+            "active": initial_index,
             "currentvalue": {"prefix": "Simulation time: ", "suffix": " s"},
             "pad": {"t": 48},
             "steps": steps,
@@ -269,8 +299,24 @@ def pulse_figure(
     )
     figure.update_xaxes(title_text="Waveform time (s)", gridcolor=palette.LINE, row=1, col=1)
     figure.update_yaxes(title_text="Normalized amplitude", gridcolor=palette.LINE, row=1, col=1)
-    figure.update_xaxes(title_text="mm", scaleanchor="y2", gridcolor=palette.LINE, row=2, col=1)
-    figure.update_yaxes(title_text="mm", gridcolor=palette.LINE, row=2, col=1)
+    figure.update_xaxes(
+        title_text="mm",
+        range=[float(result.grid_x_mm[0]), float(result.grid_x_mm[-1])],
+        gridcolor=palette.LINE,
+        constrain="domain",
+        row=2,
+        col=1,
+    )
+    figure.update_yaxes(
+        title_text="mm",
+        range=[float(result.grid_y_mm[0]), float(result.grid_y_mm[-1])],
+        gridcolor=palette.LINE,
+        scaleanchor="x2",
+        scaleratio=1,
+        constrain="domain",
+        row=2,
+        col=1,
+    )
     return figure
 
 
