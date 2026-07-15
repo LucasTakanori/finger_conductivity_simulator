@@ -12,7 +12,7 @@ from finger_sim.models import FingerModel, WaveformSpec
 from finger_sim.simulation import SimulationResult
 
 
-SCHEMA_VERSION = "finger-conductivity-v1"
+SCHEMA_VERSION = "finger-conductivity-v2"
 
 
 def arrays_for_export(
@@ -28,6 +28,7 @@ def arrays_for_export(
         "target": "clean differential conductivity, not a PVI/Newton image",
         "coordinate_units": "mm",
         "conductivity_units": "S/m",
+        "frequency_hz": model.frequency_hz,
         "mesh_id": mesh_id,
         "mesh_manifest": mesh_manifest or {},
         "finger_model": model.to_dict(),
@@ -38,12 +39,20 @@ def arrays_for_export(
             "normalize": waveform.normalize,
         },
     }
+    delta = result.delta_sigma.astype(np.float32)
+    absolute = result.sigma_dynamic.astype(np.float32)
+    resting = result.sigma_baseline.astype(np.float32)
     return {
-        "sigma": result.delta_sigma.astype(np.float32),
+        # Clear scientific names for new consumers.
+        "delta_sigma": delta,
+        "absolute_conductivity": absolute,
+        "resting_absolute_conductivity": resting,
+        # Backward-compatible names used by the current 2D_GCNM adapter.
+        "sigma": delta,
         "sigma_baseline": np.broadcast_to(
             result.sigma_baseline[None, :], result.delta_sigma.shape
         ).astype(np.float32),
-        "sigma_dynamic": result.sigma_dynamic.astype(np.float32),
+        "sigma_dynamic": absolute,
         "time_s": result.time_s.astype(np.float32),
         "waveform": result.waveform.astype(np.float32),
         "tissue_labels": result.tissue_labels.astype(np.uint8),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from copy import deepcopy
 
 import numpy as np
 import streamlit as st
@@ -13,6 +14,14 @@ from finger_sim.models import FingerModel, WaveformSpec
 
 _MODEL_KEY = "finger_model"
 _WAVE_KEY = "waveform_spec"
+_SAVED_KEY = "saved_finger_models"
+
+FINGER_SIZE_PRESETS = {
+    "Small finger · 14 × 12 mm": (14.0, 12.0),
+    "Medium finger · 18 × 16 mm": (18.0, 16.0),
+    "Large finger · 22 × 19 mm": (22.0, 19.0),
+    "Extra large finger · 26 × 22 mm": (26.0, 22.0),
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -36,6 +45,46 @@ def set_model_dict(values: dict) -> None:
 
 def get_model() -> FingerModel:
     return FingerModel.from_dict(get_model_dict())
+
+
+def resize_model(model_dict: dict, width_mm: float, height_mm: float) -> dict:
+    """Resize the outer finger and every embedded structure coherently."""
+    updated = deepcopy(model_dict)
+    old_width = float(updated["width_mm"])
+    old_height = float(updated["height_mm"])
+    sx = float(width_mm) / old_width
+    sy = float(height_mm) / old_height
+    layer_scale = min(sx, sy)
+    updated["width_mm"] = float(width_mm)
+    updated["height_mm"] = float(height_mm)
+    updated["skin_thickness_mm"] *= layer_scale
+    updated["fat_thickness_mm"] *= layer_scale
+    for item in [updated["bone"], *updated.get("ligaments", []), *updated["arteries"]]:
+        item["center_x_mm"] *= sx
+        item["center_y_mm"] *= sy
+        item["radius_x_mm"] *= sx
+        item["radius_y_mm"] *= sy
+    FingerModel.from_dict(updated)
+    return updated
+
+
+def saved_models() -> dict[str, dict]:
+    if _SAVED_KEY not in st.session_state:
+        st.session_state[_SAVED_KEY] = {}
+    return st.session_state[_SAVED_KEY]
+
+
+def save_model(name: str) -> None:
+    clean_name = name.strip()
+    if not clean_name:
+        raise ValueError("model name cannot be empty")
+    saved_models()[clean_name] = deepcopy(get_model_dict())
+
+
+def load_saved_model(name: str) -> None:
+    if name not in saved_models():
+        raise KeyError(name)
+    set_model_dict(deepcopy(saved_models()[name]))
 
 
 # --------------------------------------------------------------------------- #

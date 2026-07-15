@@ -20,14 +20,14 @@ integration boundary with the PVI solver and 2D_GCNM.
 ## 2. User workflow
 
 1. Open the Streamlit application on a normal PC.
-2. Set finger width, height, and rotation.
+2. Choose a small/medium/large finger preset or custom elliptical dimensions.
 3. Set skin/fat thickness and every tissue conductivity.
 4. Move and resize bone, ligament/tendon, and artery regions.
 5. Select a heartbeat/sine waveform or upload arbitrary CSV/TXT samples.
 6. Set artery peak \(\Delta\sigma\), phase delay, and muscle coupling.
-7. Inspect the animated Cartesian conductivity maps.
+7. Inspect the waveform and conductivity map on one synchronized time control.
 8. Select a bundled ring mesh and inspect the FEM element projection.
-9. Download a versioned NPZ sequence.
+9. Download one sequence or an augmented batch of distinct beats/anatomies.
 10. Feed that sequence to a PVI forward-model adapter to create voltages and
     then assemble a 2D_GCNM training pack.
 
@@ -84,18 +84,25 @@ rasterization implementations.
 - Element-centroid tissue projection.
 - Interactive mesh preview.
 - NPZ export and reproducible CLI export.
+- Portable model JSON plus browser-session save/load.
+- Reproducible augmented batches with independent finger size, artery geometry,
+  conductivity, waveform morphology, and beat-duration variation.
 
 ## 5. Phase 2: make it a training dataset factory
 
 ### 5.1 Domain-randomization specification
 
-Add distributions, not only sliders, for:
+Implemented distributions and UI/CLI controls:
 
-- Finger size, eccentricity, and boundary deformation.
-- Tissue thickness and conductivity.
-- Bone/ligament geometry.
+- Finger size and eccentricity.
+- Tissue and arterial conductivity.
 - Artery count, location, radius, aspect ratio, and rotation.
-- Pulse amplitude, timing, and waveform family.
+- Pulse amplitude, duration, and smooth morphology variation.
+
+Still to add:
+
+- Non-elliptical boundary deformation and randomized tissue thickness.
+- Bone/ligament geometry distributions.
 - Ring rotation, electrode placement jitter, contact impedance, and gain.
 
 Every generated sample must save both the sampled parameters and a deterministic
@@ -103,7 +110,8 @@ random seed.
 
 ### 5.2 Batch generator
 
-Add a dataset page and CLI capable of generating many anatomies. A recommended
+The mesh/export page and CLI now generate many anatomies in one versioned NPZ.
+A recommended
 first learning curve is 512, 2,000, 8,000, and 32,000 unique anatomy/ring
 combinations. Split by base anatomy and mesh/ring configuration, never by
 cardiac frame, so waveform variants cannot leak into validation.
@@ -174,8 +182,8 @@ provenance.
 
 ## 9. GitHub milestones
 
-1. **v0.1:** current interactive model, bundled meshes, and NPZ export.
-2. **v0.2:** parameter-distribution editor and batch generation.
+1. **v0.1:** interactive model, bundled meshes, and NPZ export.
+2. **v0.2:** parameter-distribution editor and batch generation (implemented).
 3. **v0.3:** PVI forward-solver adapter and voltage/noise generation.
 4. **v0.4:** multi-mesh dataset manifest and grouped splits.
 5. **v1.0:** documented phantom validation and stable 2D_GCNM handoff.

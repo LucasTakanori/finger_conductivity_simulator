@@ -13,19 +13,17 @@ not tied to an HPC cluster.
 
 The webapp is a hub (`app/Home.py`) plus three tool pages:
 
-1. **Finger model** — an interactive GPU cross-section. Each tissue is a
-   draggable object: move its centre, drag the rim handles to stretch a circle
-   into an ellipse, or rotate it, and the conductivity field re-renders in real
-   time. Hover anywhere to identify the tissue and read its conductivity. The
-   finger can be scaled to any bundled ring size, which also previews that ring's
-   triangular mesh over the model. Rendering uses **WebGPU** when the browser
-   provides it and falls back to **WebGL2** otherwise; both paths run the same
-   per-pixel tissue classifier, verified point-for-point against the Python model.
-2. **Waveform** — heartbeat, sine, or arbitrary CSV/TXT pulse, with an animated
-   differential/dynamic conductivity map. A time scrubber selects any frame and
-   the colour legend is held constant across the whole beat.
-3. **Mesh & export** — projects the conductivity onto a PVI ring mesh with the
-   triangular grid drawn over the field, and exports a versioned NPZ for 2D_GCNM.
+1. **Finger model** — a reliable high-resolution Plotly cross-section driven by
+   explicit geometry controls. Choose a small/medium/large elliptical finger or
+   custom dimensions; edit tissue/artery geometry and 50 kHz conductivity; draw
+   any bundled FEM mesh directly over both the anatomy and conductivity maps;
+   and save/load models in the browser or as portable JSON.
+2. **Waveform** — heartbeat, sine, or arbitrary CSV/TXT pulse, with synchronized
+   waveform cursor, playback frame, time label, and progress slider. Preview
+   waveform and pulse-amplitude augmentation before export.
+3. **Mesh & export** — projects conductivity onto a PVI ring mesh with strongly
+   visible triangles, exports one simulation, or generates a seeded multi-sample
+   NPZ with different finger sizes, artery geometry, conductivity, and beats.
 
 Other capabilities:
 
@@ -37,7 +35,7 @@ Other capabilities:
   are explicitly excluded from diffusion.
 - Projection onto all 38 PVI FEM mesh variants from the b035/b045 collections,
   plus the subject-selected US120 and US140 aliases.
-- A command-line exporter for reproducible dataset generation.
+- A command-line exporter for reproducible single or augmented-batch generation.
 
 The starting anatomy was informed by
 [`docs/reference/Dit.png`](docs/reference/Dit.png), but the simulator uses
@@ -95,6 +93,19 @@ finger-sim-export \
   --out exports/subject006_US120_heartbeat.npz
 ```
 
+Generate ten distinct finger/beat samples with reproducible default variation:
+
+```bash
+finger-sim-export \
+  --config configs/default_finger.json \
+  --mesh subject006_US120 \
+  --waveform heartbeat \
+  --frames 50 \
+  --samples 10 \
+  --seed 42 \
+  --out exports/subject006_US120_augmented_10.npz
+```
+
 Use `--mesh grid` for a Cartesian grid export.
 
 ## Scientific definition
@@ -133,7 +144,7 @@ phenomenological model, not a validated perfusion PDE.
 app/Home.py                 Entry point (st.navigation)
 app/views/                  Hub, finger model, waveform, and mesh-export pages
 app/lib/                    Shared navigation, state, tissue palette, and figures
-app/components/finger_canvas Custom WebGPU/WebGL2 drag-to-edit canvas (no build step)
+app/components/finger_canvas Legacy experimental GPU drag canvas
 src/finger_sim/             Scientific model, waveform, mesh, and export code
 configs/default_finger.json Reproducible default anatomy
 meshes/                     Bundled PVI ring mesh artifacts and provenance
@@ -142,11 +153,9 @@ docs/GCNM_DATA_CONTRACT.md  Exact NPZ handoff contract
 tests/                      Lightweight scientific invariants
 ```
 
-The interactive canvas implements the Streamlit component protocol in vanilla
-JavaScript, so there is **no npm/build step**: the frontend under
-`app/components/finger_canvas/frontend/` is served directly. WebGPU needs a
-recent Chrome/Edge (or Chrome-based browser with WebGPU enabled); every other
-browser automatically uses the WebGL2 path.
+There is no frontend build step. The production editor uses Plotly so the full
+tissue field renders consistently across browsers; the earlier GPU drag canvas
+is kept as an experimental component but is no longer the primary editor.
 
 ## Important limitations
 

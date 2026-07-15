@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "finger-conductivity-simulator"
-version = "0.1.0"
+version = "0.2.0"
 description = "Interactive parametric finger conductivity and pulse-delta simulator for PVI EIT/GCNM research"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -29,4 +29,3 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-

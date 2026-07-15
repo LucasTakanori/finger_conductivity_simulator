@@ -57,6 +57,7 @@ class FingerModel:
     )
     muscle_diffusion_fraction: float = 0.12
     muscle_diffusion_length_mm: float = 1.25
+    frequency_hz: float = 50_000.0
 
     def validate(self) -> None:
         if self.width_mm <= 0 or self.height_mm <= 0:
@@ -76,6 +77,8 @@ class FingerModel:
             raise ValueError("muscle diffusion fraction must be in [0, 1]")
         if self.muscle_diffusion_length_mm <= 0:
             raise ValueError("muscle diffusion length must be positive")
+        if self.frequency_hz <= 0:
+            raise ValueError("measurement frequency must be positive")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -113,4 +116,3 @@ class WaveformSpec:
 
 def default_finger_model() -> FingerModel:
     return FingerModel()
-

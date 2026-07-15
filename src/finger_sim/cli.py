@@ -6,6 +6,8 @@ import argparse
 import json
 from pathlib import Path
 
+from finger_sim.augmentation import AugmentationSpec
+from finger_sim.dataset import generate_augmented_dataset
 from finger_sim.export import arrays_for_export, export_npz
 from finger_sim.mesh import discover_meshes, load_ring_mesh, mesh_points_mm
 from finger_sim.models import FingerModel, WaveformSpec
@@ -20,6 +22,15 @@ def main() -> None:
     parser.add_argument("--waveform", choices=["heartbeat", "sine"], default="heartbeat")
     parser.add_argument("--frames", type=int, default=50)
     parser.add_argument("--duration", type=float, default=1.0)
+    parser.add_argument("--samples", type=int, default=1, help="augmented samples in one NPZ")
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--finger-size-variation", type=float, default=0.08)
+    parser.add_argument("--artery-size-variation", type=float, default=0.20)
+    parser.add_argument("--artery-position-mm", type=float, default=1.0)
+    parser.add_argument("--artery-rotation-deg", type=float, default=15.0)
+    parser.add_argument("--conductivity-variation", type=float, default=0.10)
+    parser.add_argument("--waveform-shape-variation", type=float, default=0.12)
+    parser.add_argument("--duration-variation", type=float, default=0.08)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
@@ -27,19 +38,38 @@ def main() -> None:
     waveform = WaveformSpec(args.waveform, args.frames, args.duration)
     mesh_id = None
     manifest = None
-    if args.mesh == "grid":
-        result = simulate_grid(model, waveform, args.grid_size)
-    else:
+    mesh = None
+    if args.mesh != "grid":
         paths = discover_meshes()
         if args.mesh not in paths:
             raise KeyError(f"unknown mesh {args.mesh}; choices: {sorted(paths)}")
         mesh = load_ring_mesh(paths[args.mesh], args.mesh)
-        result = simulate_points(mesh_points_mm(mesh, model), model, waveform)
         mesh_id = mesh.mesh_id
         manifest = mesh.manifest
-    arrays = arrays_for_export(
-        result, model, waveform, mesh_id=mesh_id, mesh_manifest=manifest
-    )
+
+    if args.samples > 1:
+        augmentation = AugmentationSpec(
+            samples=args.samples,
+            seed=args.seed,
+            finger_size_fraction=args.finger_size_variation,
+            artery_size_fraction=args.artery_size_variation,
+            artery_position_mm=args.artery_position_mm,
+            artery_rotation_deg=args.artery_rotation_deg,
+            conductivity_fraction=args.conductivity_variation,
+            waveform_shape_fraction=args.waveform_shape_variation,
+            duration_fraction=args.duration_variation,
+        )
+        arrays = generate_augmented_dataset(
+            model, waveform, augmentation, mesh=mesh, grid_size=args.grid_size
+        )
+    else:
+        if mesh is None:
+            result = simulate_grid(model, waveform, args.grid_size)
+        else:
+            result = simulate_points(mesh_points_mm(mesh, model), model, waveform)
+        arrays = arrays_for_export(
+            result, model, waveform, mesh_id=mesh_id, mesh_manifest=manifest
+        )
     output = export_npz(args.out, arrays)
     print(output.resolve())
 

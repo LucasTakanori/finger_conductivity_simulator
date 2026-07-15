@@ -15,6 +15,16 @@ SURFACE = "#FFFFFF"
 LINE = "#D3DCE3"
 ARTERIAL = "#C0304A"  # primary action accent
 
+# Absolute conductivity is sequential: pale neutral -> coral -> deep plum.
+# Delta conductivity remains the conventional blue-negative/red-positive map.
+ABSOLUTE_SCALE = [
+    [0.00, "#F7F3F2"],
+    [0.25, "#E8C5C0"],
+    [0.50, "#CE817B"],
+    [0.75, "#96465A"],
+    [1.00, "#3D1938"],
+]
+
 # Tissue label integers must match finger_sim.geometry.
 OUTSIDE, SKIN, FAT, MUSCLE, BONE, LIGAMENT, ARTERY = range(7)
 

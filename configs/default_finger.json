@@ -47,6 +47,6 @@
     }
   ],
   "muscle_diffusion_fraction": 0.12,
-  "muscle_diffusion_length_mm": 1.25
+  "muscle_diffusion_length_mm": 1.25,
+  "frequency_hz": 50000.0
 }
-

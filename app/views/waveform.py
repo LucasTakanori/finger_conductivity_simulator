@@ -1,4 +1,4 @@
-"""Waveform: shape the pulse and animate the differential conductivity."""
+"""Waveform editor with synchronized pulse and conductivity playback."""
 
 from __future__ import annotations
 
@@ -11,22 +11,23 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import figures, state, ui  # noqa: E402
+from finger_sim.augmentation import AugmentationSpec, augment_model, augment_waveform  # noqa: E402
 from finger_sim.models import WaveformSpec  # noqa: E402
 from finger_sim.simulation import simulate_grid  # noqa: E402
 
 ui.page_header(
     "Step 02",
-    "Waveform & pulse response",
-    "Choose the arterial pulse, then scrub the beat. The colour legend stays fixed across "
-    "every frame so you can compare magnitudes over time.",
+    "Waveform and conductivity replay",
+    "Define one arterial pulse, optionally preview an augmented beat, and play the waveform "
+    "and conductivity map on one shared time control.",
 )
 
 model = state.get_model()
 
 controls = st.columns([1, 1, 1, 2])
 kind = controls[0].selectbox("Waveform", ["heartbeat", "sine", "custom"])
-frames = controls[1].number_input("Frames", 10, 200, 50, 5)
-duration = controls[2].number_input("Duration (s)", 0.1, 10.0, 1.0, 0.1)
+frames = controls[1].number_input("Frames per beat", 10, 200, state.get_waveform().frames, 5)
+duration = controls[2].number_input("Beat duration (s)", 0.1, 10.0, state.get_waveform().duration_s, 0.1)
 custom_values: list[float] = []
 if kind == "custom":
     uploaded = controls[3].file_uploader("Upload CSV/TXT", type=["csv", "txt"])
@@ -40,12 +41,48 @@ if kind == "custom":
 
 spec = WaveformSpec(kind, int(frames), float(duration), custom_values)
 state.set_waveform(spec)
-result = simulate_grid(model, spec, 96)
 
-st.plotly_chart(figures.waveform_figure(result), use_container_width=True)
+with st.expander("Waveform data augmentation preview"):
+    enabled = st.checkbox("Preview one randomized beat", value=False)
+    aug_cols = st.columns(4)
+    seed = aug_cols[0].number_input("Preview seed", 0, 1_000_000, 0, 1)
+    shape_pct = aug_cols[1].slider("Shape variation (%)", 0, 40, 12, 1)
+    duration_pct = aug_cols[2].slider("Duration variation (%)", 0, 30, 8, 1)
+    amplitude_pct = aug_cols[3].slider("Delta amplitude variation (%)", 0, 40, 10, 1)
+    st.caption("The seed makes the preview reproducible. Batch export draws a different beat and anatomy for every sample.")
 
-view = st.radio("Map", ["Differential conductivity", "Dynamic conductivity"], horizontal=True)
-animate = st.checkbox("Show play button", value=True)
-st.plotly_chart(figures.dynamic_figure(result, view, animate), use_container_width=True)
+display_model = model
+display_spec = spec
+if enabled:
+    aug = AugmentationSpec(
+        samples=1,
+        seed=int(seed),
+        finger_size_fraction=0.0,
+        artery_size_fraction=0.0,
+        artery_position_mm=0.0,
+        artery_rotation_deg=0.0,
+        conductivity_fraction=float(amplitude_pct) / 100.0,
+        waveform_shape_fraction=float(shape_pct) / 100.0,
+        duration_fraction=float(duration_pct) / 100.0,
+    )
+    rng = np.random.default_rng(aug.seed)
+    display_model = augment_model(model, aug, rng)
+    display_spec = augment_waveform(spec, aug, rng)
 
-st.caption("Δσ is masked to arteries plus a muscle-only Gaussian halo. Skin, fat, bone, and ligament receive no pulse.")
+result = simulate_grid(display_model, display_spec, 112)
+view = st.radio(
+    "Conductivity map",
+    ["Delta conductivity Δσ", "Absolute conductivity σ"],
+    horizontal=True,
+)
+st.plotly_chart(
+    figures.pulse_figure(result, view, animate=True, height=780),
+    use_container_width=True,
+)
+
+st.caption(
+    "The vertical waveform cursor, simulation frame, time label, and progress slider are one "
+    "animation state. Absolute conductivity is σ=σ₀+Δσ; delta conductivity is the clean GCNM target. "
+    "All tissue conductivities are specified at 50 kHz."
+)
+st.info("Pulse spread is restricted to arteries and the configured muscle halo. Skin, fat, bone, and ligament remain unchanged.")

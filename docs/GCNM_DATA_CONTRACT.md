@@ -2,13 +2,16 @@
 
 ## Export schema
 
-Every exported `.npz` contains:
+Every single-simulation `.npz` contains:
 
 | Array | Shape for mesh export | Meaning |
 |---|---:|---|
-| `sigma` | `(T, K)` | Clean differential conductivity target \(\Delta\sigma_t\) |
-| `sigma_baseline` | `(T, K)` | Absolute baseline conductivity repeated for each frame |
-| `sigma_dynamic` | `(T, K)` | \(\sigma_0 + \Delta\sigma_t\) |
+| `delta_sigma` | `(T, K)` | Clean differential conductivity target \(\Delta\sigma_t\) |
+| `absolute_conductivity` | `(T, K)` | Absolute conductivity \(\sigma_0 + \Delta\sigma_t\) |
+| `resting_absolute_conductivity` | `(K,)` | Absolute conductivity at rest \(\sigma_0\) |
+| `sigma` | `(T, K)` | Compatibility alias of `delta_sigma` for 2D_GCNM |
+| `sigma_baseline` | `(T, K)` | Compatibility copy of \(\sigma_0\) at every frame |
+| `sigma_dynamic` | `(T, K)` | Compatibility alias of `absolute_conductivity` |
 | `time_s` | `(T,)` | Frame time in seconds |
 | `waveform` | `(T,)` | Normalized input waveform |
 | `tissue_labels` | `(K,)` | Integer tissue class per element |
@@ -19,6 +22,12 @@ Here, `T` is the waveform frame count and `K` is the selected inverse-mesh
 element count. For a Cartesian export, `K = H × W`; `grid_shape` can be
 reconstructed from the chosen export configuration. Mesh exports are the
 preferred handoff for 2D_GCNM.
+
+The augmented export adds a leading sample dimension `N`: `delta_sigma` and
+`absolute_conductivity` are `(N, T, K)`, resting conductivity is `(N, K)`,
+waveforms and time are `(N, T)`, and points are `(N, K, 2)`. Each sample stores
+its actual anatomy and waveform parameters in `metadata_json`, together with
+the seed and augmentation bounds. Conductivity metadata is fixed at 50 kHz.
 
 ## Required forward-model adapter
 
@@ -51,7 +60,6 @@ it as supervision.
 1. Confirm `K` matches the inverse mesh.
 2. Confirm the forward and inverse meshes belong to the same bundle.
 3. Confirm conductivity is in S/m and coordinates are in mm.
-4. Confirm `sigma_dynamic - sigma_baseline == sigma` within float tolerance.
+4. Confirm `absolute_conductivity - resting_absolute_conductivity == delta_sigma` within float tolerance.
 5. Group all frames from the same anatomy into one dataset split.
 6. Preserve `metadata_json` when adding voltages.
-

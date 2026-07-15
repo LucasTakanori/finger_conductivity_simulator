@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 import lib  # noqa: F401
 from finger_sim.mesh import element_to_node_values, mesh_nodes_mm
@@ -45,7 +46,31 @@ def _heatmap(z, result, colorscale, zmin, zmax, zmid, unit) -> go.Heatmap:
     )
 
 
-def tissue_figure(result: SimulationResult) -> go.Figure:
+def _overlay_triangles(figure: go.Figure, mesh_overlay: dict | None) -> None:
+    if not mesh_overlay or not mesh_overlay.get("count"):
+        return
+    nodes = np.asarray(mesh_overlay["nodes"], dtype=float).reshape(-1, 2)
+    elements = np.asarray(mesh_overlay["elements"], dtype=int).reshape(-1, 3)
+    xs, ys = _triangle_edges(nodes, elements)
+    figure.add_trace(
+        go.Scatter(
+            x=xs,
+            y=ys,
+            mode="lines",
+            line={"color": "rgba(19,35,59,0.62)", "width": 1.0},
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
+
+
+def tissue_figure(
+    result: SimulationResult,
+    *,
+    mesh_overlay: dict | None = None,
+    height: int = 520,
+    title: str = "Tissue regions",
+) -> go.Figure:
     shape = result.grid_shape
     z = result.tissue_labels.reshape(shape).astype(float)
     z[z == palette.OUTSIDE] = np.nan
@@ -61,18 +86,49 @@ def tissue_figure(result: SimulationResult) -> go.Figure:
             hovertemplate="x=%{x:.2f} mm<br>y=%{y:.2f} mm<extra></extra>",
         )
     )
-    _base_layout(figure, "Tissue regions")
+    _overlay_triangles(figure, mesh_overlay)
+    _base_layout(figure, title, height=height)
     _square_axes(figure)
     return figure
 
 
-def baseline_figure(result: SimulationResult) -> go.Figure:
+def baseline_figure(
+    result: SimulationResult,
+    *,
+    mesh_overlay: dict | None = None,
+    height: int = 520,
+) -> go.Figure:
     shape = result.grid_shape
     z = result.sigma_baseline.reshape(shape)
     figure = go.Figure(
-        _heatmap(z, result, "Cividis", float(np.nanmin(z)), float(np.nanmax(z)), None, "S/m")
+        _heatmap(z, result, palette.ABSOLUTE_SCALE, float(np.nanmin(z)), float(np.nanmax(z)), None, "S/m")
     )
-    _base_layout(figure, "Absolute conductivity σ₀")
+    _overlay_triangles(figure, mesh_overlay)
+    _base_layout(figure, "Resting absolute conductivity σ₀ · 50 kHz", height=height)
+    _square_axes(figure)
+    return figure
+
+
+def conductivity_figure(
+    result: SimulationResult,
+    values: np.ndarray,
+    title: str,
+    *,
+    delta: bool,
+    mesh_overlay: dict | None = None,
+    height: int = 560,
+) -> go.Figure:
+    """One registered conductivity frame on a Cartesian finger grid."""
+    z = np.asarray(values).reshape(result.grid_shape)
+    if delta:
+        limit = max(float(np.nanmax(np.abs(z))), 1e-9)
+        colorscale, zmin, zmax, zmid = "RdBu_r", -limit, limit, 0.0
+    else:
+        colorscale = palette.ABSOLUTE_SCALE
+        zmin, zmax, zmid = float(np.nanmin(z)), float(np.nanmax(z)), None
+    figure = go.Figure(_heatmap(z, result, colorscale, zmin, zmax, zmid, "S/m"))
+    _overlay_triangles(figure, mesh_overlay)
+    _base_layout(figure, title, height=height)
     _square_axes(figure)
     return figure
 
@@ -100,6 +156,124 @@ def waveform_figure(result: SimulationResult) -> go.Figure:
     return figure
 
 
+def pulse_figure(
+    result: SimulationResult,
+    view: str = "Delta conductivity",
+    *,
+    animate: bool = True,
+    height: int = 720,
+) -> go.Figure:
+    """Waveform and map in one animation so cursor, slider, and frame cannot drift."""
+    shape = result.grid_shape
+    is_delta = view.startswith("Delta")
+    if is_delta:
+        source = result.delta_sigma
+        peak = max(float(np.nanmax(np.abs(source))), 1e-9)
+        zmin, zmax, zmid, colorscale = -peak, peak, 0.0, "RdBu_r"
+        map_title = "Delta conductivity Δσ"
+    else:
+        source = result.sigma_dynamic
+        zmin, zmax = float(np.nanmin(source)), float(np.nanmax(source))
+        zmid, colorscale = None, palette.ABSOLUTE_SCALE
+        map_title = "Absolute conductivity σ = σ₀ + Δσ"
+
+    figure = make_subplots(
+        rows=2,
+        cols=1,
+        row_heights=[0.28, 0.72],
+        vertical_spacing=0.10,
+        subplot_titles=("Input pulse waveform", map_title),
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=result.time_s,
+            y=result.waveform,
+            mode="lines",
+            line={"color": palette.ARTERIAL, "width": 2.5},
+            fill="tozeroy",
+            fillcolor="rgba(192,48,74,0.10)",
+            hovertemplate="t=%{x:.3f} s<br>amplitude=%{y:.3f}<extra></extra>",
+            name="waveform",
+        ),
+        row=1,
+        col=1,
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=[result.time_s[0], result.time_s[0]],
+            y=[float(np.nanmin(result.waveform)), float(np.nanmax(result.waveform))],
+            mode="lines",
+            line={"color": palette.INK, "width": 2, "dash": "dot"},
+            hoverinfo="skip",
+            showlegend=False,
+        ),
+        row=1,
+        col=1,
+    )
+    figure.add_trace(
+        _heatmap(source[0].reshape(shape), result, colorscale, zmin, zmax, zmid, "S/m"),
+        row=2,
+        col=1,
+    )
+
+    ymin = float(np.nanmin(result.waveform))
+    ymax = float(np.nanmax(result.waveform))
+    figure.frames = [
+        go.Frame(
+            name=str(i),
+            data=[
+                go.Scatter(x=[result.time_s[i], result.time_s[i]], y=[ymin, ymax]),
+                _heatmap(source[i].reshape(shape), result, colorscale, zmin, zmax, zmid, "S/m"),
+            ],
+            traces=[1, 2],
+        )
+        for i in range(len(source))
+    ]
+    steps = [
+        {
+            "method": "animate",
+            "label": f"{result.time_s[i]:.2f}",
+            "args": [[str(i)], {"frame": {"duration": 0, "redraw": True}, "mode": "immediate"}],
+        }
+        for i in range(len(source))
+    ]
+    controls = []
+    if animate:
+        controls = [
+            {
+                "type": "buttons",
+                "x": 0.0,
+                "y": -0.04,
+                "buttons": [
+                    {"label": "▶ Play", "method": "animate", "args": [None, {"frame": {"duration": 70, "redraw": True}, "fromcurrent": True}]},
+                    {"label": "⏸ Pause", "method": "animate", "args": [[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate"}]},
+                ],
+            }
+        ]
+    figure.update_layout(
+        height=height,
+        font=_FONT,
+        paper_bgcolor=_PAPER,
+        plot_bgcolor=_PAPER,
+        margin={"l": 20, "r": 20, "t": 45, "b": 110},
+        showlegend=False,
+        sliders=[{
+            "active": 0,
+            "currentvalue": {"prefix": "Simulation time: ", "suffix": " s"},
+            "pad": {"t": 48},
+            "steps": steps,
+            "x": 0.0,
+            "len": 1.0,
+        }],
+        updatemenus=controls,
+    )
+    figure.update_xaxes(title_text="Waveform time (s)", gridcolor=palette.LINE, row=1, col=1)
+    figure.update_yaxes(title_text="Normalized amplitude", gridcolor=palette.LINE, row=1, col=1)
+    figure.update_xaxes(title_text="mm", scaleanchor="y2", gridcolor=palette.LINE, row=2, col=1)
+    figure.update_yaxes(title_text="mm", gridcolor=palette.LINE, row=2, col=1)
+    return figure
+
+
 def dynamic_figure(result: SimulationResult, view: str, animate: bool) -> go.Figure:
     """Animated pulse map: time scrubber + a legend fixed across the whole beat."""
     shape = result.grid_shape
@@ -112,8 +286,8 @@ def dynamic_figure(result: SimulationResult, view: str, animate: bool) -> go.Fig
     else:
         source = result.sigma_dynamic
         zmin, zmax = float(np.nanmin(source)), float(np.nanmax(source))
-        zmid, colorscale = None, "Cividis"
-        title = "Dynamic conductivity σ₀ + Δσ"
+        zmid, colorscale = None, palette.ABSOLUTE_SCALE
+        title = "Absolute conductivity σ = σ₀ + Δσ"
 
     def trace(index: int) -> go.Heatmap:
         return _heatmap(source[index].reshape(shape), result, colorscale, zmin, zmax, zmid, "S/m")
@@ -182,7 +356,7 @@ def mesh_field_figure(
             j=mesh.elements[:, 1],
             k=mesh.elements[:, 2],
             intensity=node_values,
-            colorscale="RdBu_r" if delta else "Cividis",
+            colorscale="RdBu_r" if delta else palette.ABSOLUTE_SCALE,
             cmin=(-limit if delta else None),
             cmax=(limit if delta else None),
             flatshading=True,
@@ -198,7 +372,7 @@ def mesh_field_figure(
                 y=ys,
                 z=[0.01] * len(xs),
                 mode="lines",
-                line={"color": "rgba(19,35,59,0.35)", "width": 1},
+                line={"color": "rgba(19,35,59,0.78)", "width": 2.2},
                 hoverinfo="skip",
                 showlegend=False,
             )

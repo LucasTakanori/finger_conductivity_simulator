@@ -48,6 +48,16 @@ h1, h2, h3, h4 {{ font-family: 'Space Grotesk', 'Inter', sans-serif; letter-spac
 .nav-name {{ font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 1.18rem; color: var(--ink); margin: 0.35rem 0 0.25rem; }}
 .nav-desc {{ color: var(--muted); font-size: 0.9rem; line-height: 1.45; }}
 
+/* Native Streamlit page links are the cards: the entire visible button clicks. */
+div[data-testid="stPageLink"] a {{
+  min-height: 4.4rem; width: 100%; display: flex; align-items: center;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--surface);
+  padding: 1rem 1.1rem; color: var(--ink); font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.02rem; font-weight: 600; text-decoration: none;
+  transition: border-color .15s ease, transform .15s ease;
+}}
+div[data-testid="stPageLink"] a:hover {{ border-color: var(--arterial); transform: translateY(-2px); color: var(--arterial); }}
+
 /* Tissue spectrum rail (the page signature) */
 .rail {{ display: flex; flex-direction: column; gap: 0.4rem; }}
 .rail-row {{ display: flex; align-items: center; gap: 0.55rem; font-size: 0.85rem; color: var(--ink); }}
