@@ -11,19 +11,32 @@ not tied to an HPC cluster.
 
 ## What is implemented
 
-- Editable finger width, height, and rotation.
+The webapp is a hub (`app/Home.py`) plus three tool pages:
+
+1. **Finger model** — an interactive GPU cross-section. Each tissue is a
+   draggable object: move its centre, drag the rim handles to stretch a circle
+   into an ellipse, or rotate it, and the conductivity field re-renders in real
+   time. Hover anywhere to identify the tissue and read its conductivity. The
+   finger can be scaled to any bundled ring size, which also previews that ring's
+   triangular mesh over the model. Rendering uses **WebGPU** when the browser
+   provides it and falls back to **WebGL2** otherwise; both paths run the same
+   per-pixel tissue classifier, verified point-for-point against the Python model.
+2. **Waveform** — heartbeat, sine, or arbitrary CSV/TXT pulse, with an animated
+   differential/dynamic conductivity map. A time scrubber selects any frame and
+   the colour legend is held constant across the whole beat.
+3. **Mesh & export** — projects the conductivity onto a PVI ring mesh with the
+   triangular grid drawn over the field, and exports a versioned NPZ for 2D_GCNM.
+
+Other capabilities:
+
 - Independent skin, fat, muscle, bone, ligament/tendon, and arterial
-  conductivities.
-- Editable bone, ligament, and one/two artery geometry.
+  conductivities; editable skin/fat thickness and finger rotation.
 - Artery position, elliptical radius, rotation, baseline conductivity, pulse
   amplitude, and phase delay.
-- Built-in heartbeat and sine waveforms, plus arbitrary CSV/TXT samples.
 - A configurable muscle-only pulse halo. Skin, fat, bone, and ligament/tendon
   are explicitly excluded from diffusion.
-- Animated absolute and differential conductivity maps.
 - Projection onto all 38 PVI FEM mesh variants from the b035/b045 collections,
   plus the subject-selected US120 and US140 aliases.
-- Versioned NPZ export with the arrays expected by a 2D_GCNM data adapter.
 - A command-line exporter for reproducible dataset generation.
 
 The starting anatomy was informed by
@@ -117,7 +130,10 @@ phenomenological model, not a validated perfusion PDE.
 ## Repository layout
 
 ```text
-app/Home.py                 Streamlit user interface
+app/Home.py                 Entry point (st.navigation)
+app/views/                  Hub, finger model, waveform, and mesh-export pages
+app/lib/                    Shared navigation, state, tissue palette, and figures
+app/components/finger_canvas Custom WebGPU/WebGL2 drag-to-edit canvas (no build step)
 src/finger_sim/             Scientific model, waveform, mesh, and export code
 configs/default_finger.json Reproducible default anatomy
 meshes/                     Bundled PVI ring mesh artifacts and provenance
@@ -125,6 +141,12 @@ docs/PLAN.md                Product/research implementation plan
 docs/GCNM_DATA_CONTRACT.md  Exact NPZ handoff contract
 tests/                      Lightweight scientific invariants
 ```
+
+The interactive canvas implements the Streamlit component protocol in vanilla
+JavaScript, so there is **no npm/build step**: the frontend under
+`app/components/finger_canvas/frontend/` is served directly. WebGPU needs a
+recent Chrome/Edge (or Chrome-based browser with WebGPU enabled); every other
+browser automatically uses the WebGL2 path.
 
 ## Important limitations
 
