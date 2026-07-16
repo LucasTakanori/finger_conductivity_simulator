@@ -69,11 +69,15 @@ if enabled:
     display_model = augment_model(model, aug, rng)
     display_spec = augment_waveform(spec, aug, rng)
 
-result = simulate_grid(display_model, display_spec, 112)
+# Lower grid resolution keeps each animation frame's redraw fast; zsmooth in the
+# figure interpolates it back to a smooth image, so playback stays fluid.
+result = simulate_grid(display_model, display_spec, 72)
 view = st.radio(
     "Conductivity map",
-    ["Delta conductivity Δσ", "Absolute conductivity σ"],
+    ["Absolute conductivity σ", "Delta conductivity Δσ"],
     horizontal=True,
+    help="Absolute σ shows the whole finger and pulses continuously. Delta Δσ is the "
+    "clean GCNM target and is near zero except around systole, so it looks sparse.",
 )
 st.plotly_chart(
     figures.pulse_figure(result, view, animate=True, height=780),

@@ -32,7 +32,7 @@ def _square_axes(figure: go.Figure) -> None:
     figure.update_yaxes(title="mm", gridcolor=palette.LINE, zeroline=False)
 
 
-def _heatmap(z, result, colorscale, zmin, zmax, zmid, unit) -> go.Heatmap:
+def _heatmap(z, result, colorscale, zmin, zmax, zmid, unit, zsmooth=False) -> go.Heatmap:
     return go.Heatmap(
         z=z,
         x=result.grid_x_mm,
@@ -41,6 +41,7 @@ def _heatmap(z, result, colorscale, zmin, zmax, zmid, unit) -> go.Heatmap:
         zmin=zmin,
         zmax=zmax,
         zmid=zmid,
+        zsmooth=zsmooth,
         colorbar={"title": unit, "outlinewidth": 0},
         hovertemplate="x=%{x:.2f} mm<br>y=%{y:.2f} mm<br>value=%{z:.4f}<extra></extra>",
     )
@@ -214,8 +215,28 @@ def pulse_figure(
         row=1,
         col=1,
     )
+    # zsmooth renders the map as a single interpolated <image> instead of a grid
+    # of rectangles: far cheaper to redraw each frame, which removes the blank
+    # gap (blink) between animation frames. Frames inherit it from this base.
     figure.add_trace(
-        _heatmap(source[initial_index].reshape(shape), result, colorscale, zmin, zmax, zmid, "S/m"),
+        _heatmap(source[initial_index].reshape(shape), result, colorscale, zmin, zmax, zmid, "S/m", zsmooth="best"),
+        row=2,
+        col=1,
+    )
+    # Static finger boundary so the map is always anchored — the Δσ field is near
+    # zero (and therefore near-invisible) for most of the beat, and a bare white
+    # square reads as "nothing is there".
+    inside = (result.tissue_labels.reshape(shape) != palette.OUTSIDE).astype(float)
+    figure.add_trace(
+        go.Contour(
+            z=inside,
+            x=result.grid_x_mm,
+            y=result.grid_y_mm,
+            contours={"start": 0.5, "end": 0.5, "size": 1, "coloring": "lines"},
+            line={"width": 1.3, "color": palette.INK},
+            showscale=False,
+            hoverinfo="skip",
+        ),
         row=2,
         col=1,
     )
@@ -223,30 +244,16 @@ def pulse_figure(
     ymin = float(np.nanmin(result.waveform))
     ymax = float(np.nanmax(result.waveform))
 
-    def animated_map(index: int) -> go.Heatmap:
-        trace = _heatmap(
-            source[index].reshape(shape),
-            result,
-            colorscale,
-            zmin,
-            zmax,
-            zmid,
-            "S/m",
-        )
-        trace.update(xaxis="x2", yaxis="y2")
-        return trace
-
+    # Frames carry ONLY the values that change (the cursor x and the heatmap z).
+    # Re-sending x/y arrays, the colorbar, and the colorscale every frame forces
+    # Plotly to tear down and rebuild the whole subplot each tick, which reads as
+    # flicker. Styling is inherited from the base traces added above.
     figure.frames = [
         go.Frame(
             name=str(i),
             data=[
-                go.Scatter(
-                    x=[result.time_s[i], result.time_s[i]],
-                    y=[ymin, ymax],
-                    xaxis="x",
-                    yaxis="y",
-                ),
-                animated_map(i),
+                go.Scatter(x=[result.time_s[i], result.time_s[i]], y=[ymin, ymax]),
+                go.Heatmap(z=source[i].reshape(shape)),
             ],
             traces=[1, 2],
         )
@@ -260,6 +267,11 @@ def pulse_figure(
         }
         for i in range(len(source))
     ]
+    # Play from the visible pulse peak and loop the whole beat, ending back on
+    # the peak. Starting at frame 0 (where Δσ is exactly zero and therefore
+    # invisible on a signed colour scale) makes the map look like it vanished.
+    n = len(source)
+    play_order = [str((initial_index + k) % n) for k in range(n + 1)]
     controls = []
     if animate:
         controls = [
@@ -272,8 +284,8 @@ def pulse_figure(
                         "label": "▶ Play",
                         "method": "animate",
                         "args": [
-                            [str(i) for i in range(len(source))],
-                            {"frame": {"duration": 70, "redraw": True}, "fromcurrent": False},
+                            play_order,
+                            {"frame": {"duration": 90, "redraw": True}, "transition": {"duration": 0}, "mode": "immediate"},
                         ],
                     },
                     {"label": "⏸ Pause", "method": "animate", "args": [[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate"}]},
