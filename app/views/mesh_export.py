@@ -14,6 +14,7 @@ from lib import figures, state, ui  # noqa: E402
 from finger_sim.augmentation import AugmentationSpec  # noqa: E402
 from finger_sim.dataset import generate_augmented_dataset  # noqa: E402
 from finger_sim.export import arrays_for_export, export_bytes  # noqa: E402
+from finger_sim import project as project_io  # noqa: E402
 from finger_sim.mesh import mesh_points_mm  # noqa: E402
 from finger_sim.simulation import simulate_grid, simulate_points  # noqa: E402
 
@@ -70,7 +71,9 @@ else:
         "Dark triangle edges show exactly where conductivity is sampled."
     )
 
-single_tab, batch_tab = st.tabs(["Current model and beat", "Augmented GCNM dataset"])
+single_tab, batch_tab, session_tab = st.tabs(
+    ["Current model and beat", "Augmented GCNM dataset", "Save / load session"]
+)
 
 with single_tab:
     arrays = arrays_for_export(result, model, spec, mesh_id=mesh_id, mesh_manifest=mesh_manifest)
@@ -92,7 +95,7 @@ with single_tab:
 with batch_tab:
     st.markdown("#### Generate different beats and different finger anatomies")
     first = st.columns(3)
-    samples = first[0].number_input("Samples", 2, 500, 10, 1)
+    samples = first[0].number_input("Samples", 2, 10_000, 1000, 1)
     seed = first[1].number_input("Random seed", 0, 10_000_000, 0, 1)
     finger_pct = first[2].slider("Finger size variation (%)", 0, 25, 8, 1)
 
@@ -102,18 +105,22 @@ with batch_tab:
     artery_rotation = anatomy[2].slider("Artery rotation variation (°)", 0.0, 45.0, 15.0, 1.0)
     conductivity_pct = anatomy[3].slider("Conductivity variation (%)", 0, 40, 10, 1)
 
-    pulse = st.columns(2)
-    waveform_pct = pulse[0].slider("Waveform shape variation (%)", 0, 40, 12, 1)
-    duration_pct = pulse[1].slider("Beat duration variation (%)", 0, 30, 8, 1)
+    extra = st.columns(4)
+    ring_rotation = extra[0].slider("Ring rotation variation (°)", 0.0, 45.0, 10.0, 1.0)
+    diffusion_pct = extra[1].slider("Muscle diffusion variation (%)", 0, 50, 15, 1)
+    waveform_pct = extra[2].slider("Waveform shape variation (%)", 0, 40, 12, 1)
+    duration_pct = extra[3].slider("Beat duration variation (%)", 0, 30, 8, 1)
 
     augmentation = AugmentationSpec(
         samples=int(samples),
         seed=int(seed),
         finger_size_fraction=float(finger_pct) / 100.0,
+        finger_rotation_deg=float(ring_rotation),
         artery_size_fraction=float(artery_size_pct) / 100.0,
         artery_position_mm=float(artery_position),
         artery_rotation_deg=float(artery_rotation),
         conductivity_fraction=float(conductivity_pct) / 100.0,
+        diffusion_fraction=float(diffusion_pct) / 100.0,
         waveform_shape_fraction=float(waveform_pct) / 100.0,
         duration_fraction=float(duration_pct) / 100.0,
     )
@@ -143,7 +150,44 @@ with batch_tab:
         )
 
     st.caption(
-        "Each sample independently perturbs finger width/height, artery size, ellipticity, position, "
-        "rotation, tissue and arterial conductivity, pulse amplitude, waveform shape, and beat duration. "
-        "The seed records the draw exactly, so a useful varied dataset is reproducible rather than ten copies of one beat."
+        "Each sample independently perturbs finger width/height, ring rotation, artery size, "
+        "ellipticity, position and rotation, tissue and arterial conductivity, muscle diffusion, "
+        "pulse amplitude, waveform shape, and beat duration. The seed records the draw exactly, so a "
+        "varied dataset is reproducible rather than many copies of one beat."
     )
+
+with session_tab:
+    st.markdown("#### Save this model + waveform as a reusable project")
+    st.markdown(
+        "A project file captures the current finger model, the selected waveform, the sampling "
+        "mesh, and the augmentation settings shown in the **Augmented GCNM dataset** tab. Hand it "
+        "to the headless generator to build a dataset with no interface at all:"
+    )
+    st.code(
+        "finger-sim-dataset --project finger_session.json --samples 1000 --seed 0 \\\n"
+        "    --out exports/finger_dataset_1000.npz",
+        language="bash",
+    )
+    project = project_io.build_project(
+        model,
+        spec,
+        mesh=(None if target == "Cartesian grid" else target),
+        grid_size=96,
+        augmentation=augmentation,
+    )
+    st.download_button(
+        "Download project (.json)",
+        project_io.dumps_project(project),
+        file_name="finger_session.json",
+        mime="application/json",
+        type="primary",
+    )
+
+    st.divider()
+    st.markdown("#### Load a saved project")
+    uploaded = st.file_uploader("Upload a project .json", type=["json"])
+    if uploaded is not None:
+        loaded = project_io.loads_project(uploaded.getvalue().decode("utf-8"))
+        state.set_model_dict(loaded["finger_model"])
+        state.set_waveform(project_io.waveform_of(loaded))
+        st.success("Project loaded — finger model and waveform updated across every page.")
