@@ -22,12 +22,21 @@ ui.page_header(
     "and conductivity map on one shared time control.",
 )
 
-model = state.get_model()
+def _reset_waveform() -> None:
+    state.reset_waveform()  # also bumps the widget nonce so the controls re-read it
 
+
+model = state.get_model()
+n = state.widget_nonce()
+
+st.button("↺ Reset waveform to defaults", on_click=_reset_waveform)
+
+current = state.get_waveform()
+kinds = ["heartbeat", "sine", "custom"]
 controls = st.columns([1, 1, 1, 2])
-kind = controls[0].selectbox("Waveform", ["heartbeat", "sine", "custom"])
-frames = controls[1].number_input("Frames per beat", 10, 200, state.get_waveform().frames, 5)
-duration = controls[2].number_input("Beat duration (s)", 0.1, 10.0, state.get_waveform().duration_s, 0.1)
+kind = controls[0].selectbox("Waveform", kinds, index=kinds.index(current.kind), key=f"wave_kind_{n}")
+frames = controls[1].number_input("Frames per beat", 10, 200, current.frames, 5, key=f"wave_frames_{n}")
+duration = controls[2].number_input("Beat duration (s)", 0.1, 10.0, current.duration_s, 0.1, key=f"wave_dur_{n}")
 custom_values: list[float] = []
 if kind == "custom":
     uploaded = controls[3].file_uploader("Upload CSV/TXT", type=["csv", "txt"])

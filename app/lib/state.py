@@ -16,6 +16,8 @@ _MODEL_KEY = "finger_model"
 _WAVE_KEY = "waveform_spec"
 _SAVED_KEY = "saved_finger_models"
 
+DEFAULT_WAVEFORM = {"kind": "heartbeat", "frames": 50, "duration_s": 1.0, "custom_values": []}
+
 FINGER_SIZE_PRESETS = {
     "Small finger · 14 × 12 mm": (14.0, 12.0),
     "Medium finger · 18 × 16 mm": (18.0, 16.0),
@@ -45,6 +47,30 @@ def set_model_dict(values: dict) -> None:
 
 def get_model() -> FingerModel:
     return FingerModel.from_dict(get_model_dict())
+
+
+_NONCE_KEY = "widget_nonce"
+
+
+def widget_nonce() -> int:
+    """Version stamped into editor widget keys.
+
+    Streamlit derives a keyless widget's identity from its parameters, so a widget
+    reverting to a value it already held reuses the old identity — and the stale
+    edit with it. Bumping this nonce gives the widgets fresh keys, which is the
+    only reliable way to make them re-read a programmatically changed model.
+    """
+    return int(st.session_state.setdefault(_NONCE_KEY, 0))
+
+
+def bump_widget_nonce() -> None:
+    st.session_state[_NONCE_KEY] = widget_nonce() + 1
+
+
+def reset_model() -> None:
+    """Restore the finger model to the built-in defaults."""
+    st.session_state[_MODEL_KEY] = default_model_dict()
+    bump_widget_nonce()
 
 
 def resize_model(model_dict: dict, width_mm: float, height_mm: float) -> dict:
@@ -92,12 +118,7 @@ def load_saved_model(name: str) -> None:
 # --------------------------------------------------------------------------- #
 def get_waveform() -> WaveformSpec:
     if _WAVE_KEY not in st.session_state:
-        st.session_state[_WAVE_KEY] = {
-            "kind": "heartbeat",
-            "frames": 50,
-            "duration_s": 1.0,
-            "custom_values": [],
-        }
+        st.session_state[_WAVE_KEY] = dict(DEFAULT_WAVEFORM)
     data = st.session_state[_WAVE_KEY]
     return WaveformSpec(
         kind=data["kind"],
@@ -114,6 +135,12 @@ def set_waveform(spec: WaveformSpec) -> None:
         "duration_s": spec.duration_s,
         "custom_values": list(spec.custom_values),
     }
+
+
+def reset_waveform() -> None:
+    """Restore the waveform to the built-in default heartbeat."""
+    st.session_state[_WAVE_KEY] = dict(DEFAULT_WAVEFORM)
+    bump_widget_nonce()
 
 
 # --------------------------------------------------------------------------- #
