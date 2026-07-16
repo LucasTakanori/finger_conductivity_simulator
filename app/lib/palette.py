@@ -27,6 +27,9 @@ ABSOLUTE_SCALE = [
 
 # Tissue label integers must match finger_sim.geometry.
 OUTSIDE, SKIN, FAT, MUSCLE, BONE, LIGAMENT, ARTERY = range(7)
+BONE_MARROW = 7
+ARTERY_WALL = 8
+N_TISSUES = 9
 
 TISSUE_COLORS = {
     OUTSIDE: "#EEF1F4",
@@ -36,6 +39,8 @@ TISSUE_COLORS = {
     BONE: "#C3CBD4",
     LIGAMENT: "#3E8E8A",
     ARTERY: "#B7263F",
+    BONE_MARROW: "#8C7B6B",
+    ARTERY_WALL: "#E08A9B",
 }
 
 TISSUE_LABELS = {
@@ -43,21 +48,22 @@ TISSUE_LABELS = {
     SKIN: "Skin",
     FAT: "Fat",
     MUSCLE: "Muscle",
-    BONE: "Bone",
+    BONE: "Bone (cortical)",
     LIGAMENT: "Ligament / tendon",
-    ARTERY: "Artery",
+    ARTERY: "Artery (blood)",
+    BONE_MARROW: "Bone marrow",
+    ARTERY_WALL: "Artery wall",
 }
 
-# Ordered rows for the persistent tissue "spectrum rail" legend.
-LEGEND_ORDER = [SKIN, FAT, MUSCLE, BONE, LIGAMENT, ARTERY]
+# Ordered rows for the persistent tissue "spectrum rail" legend, outside in.
+LEGEND_ORDER = [SKIN, FAT, MUSCLE, LIGAMENT, BONE, BONE_MARROW, ARTERY_WALL, ARTERY]
 
 
 def tissue_colorscale() -> list[list]:
-    """Discrete Plotly colorscale spanning labels 0..6 as sharp bands."""
+    """Discrete Plotly colorscale spanning every tissue label as sharp bands."""
     stops = []
-    n = 7
-    for label in range(n):
-        lo, hi = label / n, (label + 1) / n
+    for label in range(N_TISSUES):
+        lo, hi = label / N_TISSUES, (label + 1) / N_TISSUES
         color = TISSUE_COLORS[label]
         stops.append([lo, color])
         stops.append([hi, color])

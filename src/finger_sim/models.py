@@ -17,19 +17,30 @@ class Ellipse:
 
 @dataclass
 class Artery(Ellipse):
-    baseline_conductivity_s_m: float = 0.70
+    """Blood-filled lumen inside a vessel wall.
+
+    The ellipse is the artery's outer boundary; ``lumen_fraction`` of that radius
+    is blood and the remaining shell is vessel wall. Only the lumen pulsates.
+    """
+
+    baseline_conductivity_s_m: float = 0.701  # Blood, IT'IS at 50 kHz
     peak_delta_s_m: float = 0.06
     waveform_scale: float = 1.0
     phase_delay_fraction: float = 0.0
+    # Digital artery: ~0.15 mm wall on a ~0.65 mm outer radius.
+    lumen_fraction: float = 0.75
 
 
 @dataclass
 class TissueConductivities:
-    skin_s_m: float = 0.20
-    fat_s_m: float = 0.08
-    muscle_s_m: float = 0.36
-    bone_s_m: float = 0.04
-    ligament_s_m: float = 0.16
+    # IT'IS Foundation dielectric database, Gabriel dispersion, at 50 kHz.
+    skin_s_m: float = 0.000273  # Skin (Dry)
+    fat_s_m: float = 0.0433  # Fat (Average Infiltrated)
+    muscle_s_m: float = 0.352  # Muscles
+    bone_s_m: float = 0.0206  # Bone (Cortical) — the outer shell
+    bone_marrow_s_m: float = 0.00363  # Bone Marrow (Yellow) — the medullary core
+    ligament_s_m: float = 0.388  # Tendon/Ligament
+    artery_wall_s_m: float = 0.317  # Blood Vessel Wall
 
 
 @dataclass
@@ -55,6 +66,9 @@ class FingerModel:
             Artery(3.4, -2.0, 0.72, 0.60, -12.0, peak_delta_s_m=0.055),
         ]
     )
+    # Phalanx cross-section: cortical shell around a marrow-filled medullary
+    # cavity. This is the marrow core radius as a fraction of the bone radius.
+    bone_marrow_fraction: float = 0.6
     muscle_diffusion_fraction: float = 0.12
     muscle_diffusion_length_mm: float = 1.25
     frequency_hz: float = 50_000.0
@@ -73,6 +87,10 @@ class FingerModel:
         for artery in self.arteries:
             if artery.radius_x_mm <= 0 or artery.radius_y_mm <= 0:
                 raise ValueError("artery radii must be positive")
+            if not 0.0 < artery.lumen_fraction <= 1.0:
+                raise ValueError("artery lumen fraction must be in (0, 1]")
+        if not 0.0 <= self.bone_marrow_fraction < 1.0:
+            raise ValueError("bone marrow fraction must be in [0, 1)")
         if not 0.0 <= self.muscle_diffusion_fraction <= 1.0:
             raise ValueError("muscle diffusion fraction must be in [0, 1]")
         if self.muscle_diffusion_length_mm <= 0:

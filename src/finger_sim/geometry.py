@@ -13,18 +13,24 @@ OUTSIDE = 0
 SKIN = 1
 FAT = 2
 MUSCLE = 3
-BONE = 4
+BONE = 4  # cortical shell
 LIGAMENT = 5
-ARTERY = 6
+ARTERY = 6  # blood lumen (the only region the pulse drives)
+BONE_MARROW = 7  # medullary core inside the cortical shell
+ARTERY_WALL = 8  # vessel wall around the lumen
+
+N_TISSUES = 9
 
 TISSUE_NAMES = {
     OUTSIDE: "outside",
     SKIN: "skin",
     FAT: "fat",
     MUSCLE: "muscle",
-    BONE: "bone",
+    BONE: "bone (cortical)",
     LIGAMENT: "ligament/tendon",
-    ARTERY: "artery",
+    ARTERY: "artery (blood lumen)",
+    BONE_MARROW: "bone marrow",
+    ARTERY_WALL: "artery wall",
 }
 
 
@@ -59,6 +65,17 @@ def ellipse_mask(points: np.ndarray, ellipse: Ellipse) -> np.ndarray:
     return ellipse_radius(points, ellipse) <= 1.0
 
 
+def scaled_ellipse(ellipse: Ellipse, fraction: float) -> Ellipse:
+    """Concentric ellipse whose radii are ``fraction`` of the original."""
+    return Ellipse(
+        ellipse.center_x_mm,
+        ellipse.center_y_mm,
+        ellipse.radius_x_mm * fraction,
+        ellipse.radius_y_mm * fraction,
+        ellipse.rotation_deg,
+    )
+
+
 def classify_points(points_mm: np.ndarray, model: FingerModel) -> TissueField:
     model.validate()
     local = _rotate(points_mm, model.rotation_deg)
@@ -75,23 +92,33 @@ def classify_points(points_mm: np.ndarray, model: FingerModel) -> TissueField:
     labels[outer_r <= 1.0] = SKIN
     labels[inside_skin] = FAT
     labels[inside_fat] = MUSCLE
+    # Bone is a cortical shell around a marrow-filled medullary cavity.
     labels[ellipse_mask(local, model.bone)] = BONE
+    if model.bone_marrow_fraction > 0.0:
+        marrow = scaled_ellipse(model.bone, model.bone_marrow_fraction)
+        labels[ellipse_mask(local, marrow)] = BONE_MARROW
+
     for ligament in model.ligaments:
         labels[ellipse_mask(local, ligament)] = LIGAMENT
 
     artery_masks: list[np.ndarray] = []
     artery_halos: list[np.ndarray] = []
     for artery in model.arteries:
+        # The ellipse is the vessel's outer surface: wall shell, then blood lumen.
         radius = ellipse_radius(local, artery)
-        mask = radius <= 1.0
+        labels[radius <= 1.0] = ARTERY_WALL
+        lumen_mask = ellipse_mask(local, scaled_ellipse(artery, artery.lumen_fraction))
+        labels[lumen_mask] = ARTERY
+
+        # The halo is still measured outward from the vessel's outer surface.
         effective_radius = np.sqrt(artery.radius_x_mm * artery.radius_y_mm)
         distance_from_wall = np.maximum(radius - 1.0, 0.0) * effective_radius
         halo = np.exp(
             -0.5 * (distance_from_wall / model.muscle_diffusion_length_mm) ** 2
         )
-        artery_masks.append(mask)
+        # Only blood pulsates, so the delta mask is the lumen, not the whole vessel.
+        artery_masks.append(lumen_mask)
         artery_halos.append(halo)
-        labels[mask] = ARTERY
 
     c = model.conductivities
     baseline = np.full(len(local), np.nan, dtype=np.float64)
@@ -99,7 +126,9 @@ def classify_points(points_mm: np.ndarray, model: FingerModel) -> TissueField:
     baseline[labels == FAT] = c.fat_s_m
     baseline[labels == MUSCLE] = c.muscle_s_m
     baseline[labels == BONE] = c.bone_s_m
+    baseline[labels == BONE_MARROW] = c.bone_marrow_s_m
     baseline[labels == LIGAMENT] = c.ligament_s_m
+    baseline[labels == ARTERY_WALL] = c.artery_wall_s_m
     for artery, mask in zip(model.arteries, artery_masks):
         baseline[mask] = artery.baseline_conductivity_s_m
     return TissueField(labels, baseline, local, artery_masks, artery_halos)

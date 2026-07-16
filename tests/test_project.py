@@ -2,8 +2,45 @@ import numpy as np
 
 from finger_sim.augmentation import AugmentationSpec, augment_model
 from finger_sim.dataset import generate_augmented_dataset
-from finger_sim.models import WaveformSpec, default_finger_model
+from finger_sim.geometry import ARTERY, ARTERY_WALL, BONE, BONE_MARROW
+from finger_sim.models import FingerModel, WaveformSpec, default_finger_model
+from finger_sim.simulation import simulate_grid
 from finger_sim import project as project_io
+
+
+def test_bone_and_artery_have_nested_layers():
+    result = simulate_grid(default_finger_model(), WaveformSpec(frames=8), size=160)
+    labels = result.tissue_labels
+    # Cortical shell around a marrow core; vessel wall around a blood lumen.
+    for tissue in (BONE, BONE_MARROW, ARTERY_WALL, ARTERY):
+        assert (labels == tissue).any(), tissue
+    # Only blood pulsates — the wall and the marrow never do.
+    assert np.all(result.delta_sigma[:, labels == ARTERY_WALL] == 0.0)
+    assert np.all(result.delta_sigma[:, labels == BONE_MARROW] == 0.0)
+    assert np.nanmax(np.abs(result.delta_sigma[:, labels == ARTERY])) > 0
+
+
+def test_layer_fractions_control_the_amounts():
+    solid = default_finger_model()
+    solid.bone_marrow_fraction = 0.0  # no medullary cavity
+    for artery in solid.arteries:
+        artery.lumen_fraction = 1.0  # no vessel wall
+    labels = simulate_grid(solid, WaveformSpec(frames=4), size=160).tissue_labels
+    assert not (labels == BONE_MARROW).any()
+    assert not (labels == ARTERY_WALL).any()
+    assert (labels == BONE).any() and (labels == ARTERY).any()
+
+
+def test_older_models_without_layer_fields_still_load():
+    data = default_finger_model().to_dict()
+    data.pop("bone_marrow_fraction")
+    data["conductivities"].pop("bone_marrow_s_m")
+    data["conductivities"].pop("artery_wall_s_m")
+    for artery in data["arteries"]:
+        artery.pop("lumen_fraction")
+    restored = FingerModel.from_dict(data)
+    assert restored.bone_marrow_fraction == 0.6
+    assert restored.arteries[0].lumen_fraction == 0.75
 
 
 def test_augmentation_varies_ring_rotation_and_diffusion():
