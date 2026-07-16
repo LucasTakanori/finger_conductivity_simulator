@@ -47,6 +47,15 @@ def _heatmap(z, result, colorscale, zmin, zmax, zmid, unit, zsmooth=False) -> go
     )
 
 
+def _tissue_name_grid(result: SimulationResult) -> np.ndarray:
+    """Per-cell tissue names, used as hover customdata."""
+    names = np.array(
+        [palette.TISSUE_LABELS.get(label, "") for label in range(palette.N_TISSUES)],
+        dtype=object,
+    )
+    return names[result.tissue_labels.reshape(result.grid_shape)]
+
+
 def _overlay_triangles(figure: go.Figure, mesh_overlay: dict | None) -> None:
     if not mesh_overlay or not mesh_overlay.get("count"):
         return
@@ -82,9 +91,10 @@ def tissue_figure(
             y=result.grid_y_mm,
             colorscale=palette.tissue_colorscale(),
             zmin=0,
-            zmax=7,
+            zmax=palette.N_TISSUES,
             showscale=False,
-            hovertemplate="x=%{x:.2f} mm<br>y=%{y:.2f} mm<extra></extra>",
+            customdata=_tissue_name_grid(result),
+            hovertemplate="<b>%{customdata}</b><br>x=%{x:.2f} mm<br>y=%{y:.2f} mm<extra></extra>",
         )
     )
     _overlay_triangles(figure, mesh_overlay)
@@ -103,6 +113,13 @@ def baseline_figure(
     z = result.sigma_baseline.reshape(shape)
     figure = go.Figure(
         _heatmap(z, result, palette.ABSOLUTE_SCALE, float(np.nanmin(z)), float(np.nanmax(z)), None, "S/m")
+    )
+    figure.data[0].update(
+        customdata=_tissue_name_grid(result),
+        hovertemplate=(
+            "<b>%{customdata}</b><br>σ = %{z:.4f} S/m"
+            "<br>x=%{x:.2f} mm<br>y=%{y:.2f} mm<extra></extra>"
+        ),
     )
     _overlay_triangles(figure, mesh_overlay)
     _base_layout(figure, "Resting absolute conductivity σ₀ · 50 kHz", height=height)
@@ -332,52 +349,74 @@ def pulse_figure(
     return figure
 
 
-def dynamic_figure(result: SimulationResult, view: str, animate: bool) -> go.Figure:
-    """Animated pulse map: time scrubber + a legend fixed across the whole beat."""
+def conductivity_beat_figure(
+    result: SimulationResult,
+    view: str,
+    *,
+    mesh_overlay: dict | None = None,
+    height: int = 650,
+) -> go.Figure:
+    """The exported conductivity image played over one beat.
+
+    Play starts on the pulse peak and loops, the colour range is fixed across the
+    whole beat, and frames carry only ``z`` so nothing is rebuilt per tick.
+    """
     shape = result.grid_shape
-    if view == "Differential conductivity":
+    if view.startswith("Delta"):
         source = result.delta_sigma
-        peak = float(np.nanmax(np.abs(source)))
-        peak = peak if peak > 0 else 1e-9
+        peak = max(float(np.nanmax(np.abs(source))), 1e-9)
         zmin, zmax, zmid, colorscale = -peak, peak, 0.0, "RdBu_r"
-        title = "Differential conductivity Δσ"
+        title = "Delta conductivity Δσ · full beat"
     else:
         source = result.sigma_dynamic
         zmin, zmax = float(np.nanmin(source)), float(np.nanmax(source))
         zmid, colorscale = None, palette.ABSOLUTE_SCALE
-        title = "Absolute conductivity σ = σ₀ + Δσ"
+        title = "Absolute conductivity σ = σ₀ + Δσ · full beat"
 
-    def trace(index: int) -> go.Heatmap:
-        return _heatmap(source[index].reshape(shape), result, colorscale, zmin, zmax, zmid, "S/m")
+    initial = int(np.nanargmax(np.abs(result.waveform)))
+    figure = go.Figure(
+        data=[_heatmap(source[initial].reshape(shape), result, colorscale, zmin, zmax, zmid, "S/m")]
+    )
+    # Static overlay lands after the heatmap, so frames only ever touch trace 0.
+    _overlay_triangles(figure, mesh_overlay)
+    figure.frames = [
+        go.Frame(name=str(i), data=[go.Heatmap(z=source[i].reshape(shape))], traces=[0])
+        for i in range(len(source))
+    ]
 
-    figure = go.Figure(data=[trace(0)])
-    figure.frames = [go.Frame(data=[trace(i)], name=str(i)) for i in range(len(source))]
-
+    count = len(source)
+    play_order = [str((initial + k) % count) for k in range(count + 1)]
     steps = [
         {
             "method": "animate",
-            "label": f"{result.time_s[i]:.3f}",
+            "label": f"{result.time_s[i]:.2f}",
             "args": [[str(i)], {"frame": {"duration": 0, "redraw": True}, "mode": "immediate"}],
         }
-        for i in range(len(source))
+        for i in range(count)
     ]
-    sliders = [{"active": 0, "currentvalue": {"prefix": "t = ", "suffix": " s"}, "pad": {"t": 45}, "steps": steps}]
-    updatemenus = []
-    if animate:
-        updatemenus = [
-            {
-                "type": "buttons",
-                "x": 0.0,
-                "y": -0.05,
-                "buttons": [
-                    {"label": "▶ Play", "method": "animate", "args": [None, {"frame": {"duration": 70, "redraw": True}, "fromcurrent": True}]},
-                    {"label": "⏸ Pause", "method": "animate", "args": [[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate"}]},
-                ],
-            }
-        ]
-    _base_layout(figure, title, height=560)
+    _base_layout(figure, title, height=height)
     _square_axes(figure)
-    figure.update_layout(sliders=sliders, updatemenus=updatemenus)
+    figure.update_layout(
+        margin={"l": 20, "r": 20, "t": 50, "b": 90},
+        sliders=[{
+            "active": initial,
+            "currentvalue": {"prefix": "t = ", "suffix": " s"},
+            "pad": {"t": 48},
+            "steps": steps,
+        }],
+        updatemenus=[{
+            "type": "buttons",
+            "x": 0.0,
+            "y": -0.06,
+            "buttons": [
+                {"label": "▶ Play", "method": "animate",
+                 "args": [play_order, {"frame": {"duration": 90, "redraw": True},
+                                       "transition": {"duration": 0}, "mode": "immediate"}]},
+                {"label": "⏸ Pause", "method": "animate",
+                 "args": [[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate"}]},
+            ],
+        }],
+    )
     return figure
 
 
