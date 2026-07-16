@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 
 from finger_sim.dataset import generate_augmented_dataset
 from finger_sim.export import export_npz
@@ -24,10 +25,20 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--project", type=Path, required=True, help="project JSON saved from the app")
     parser.add_argument("--out", type=Path, required=True, help="output NPZ path")
-    parser.add_argument("--samples", type=int, default=None, help="number of distinct beats/anatomies")
+    parser.add_argument(
+        "--samples",
+        type=int,
+        default=None,
+        help="number of distinct beats; one sample is one complete beat with its own anatomy",
+    )
     parser.add_argument("--seed", type=int, default=None, help="RNG seed for a reproducible draw")
-    parser.add_argument("--mesh", default=None, help="'grid' or a bundled mesh id; overrides the project")
-    parser.add_argument("--grid-size", type=int, default=None, help="Cartesian grid resolution when --mesh grid")
+    parser.add_argument(
+        "--mesh",
+        default=None,
+        help="'grid' (default) exports a conductivity image; a bundled mesh id samples on that "
+        "FEM mesh instead. Overrides the project.",
+    )
+    parser.add_argument("--grid-size", type=int, default=None, help="image resolution in pixels per side")
     # Per-variation overrides (all optional; None -> keep the project value).
     parser.add_argument("--finger-size-variation", type=float, default=None)
     parser.add_argument("--finger-rotation-deg", type=float, default=None)
@@ -63,7 +74,7 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     mesh_choice = args.mesh if args.mesh is not None else project.get("mesh")
-    grid_size = args.grid_size if args.grid_size is not None else int(project.get("grid_size", 96))
+    grid_size = args.grid_size if args.grid_size is not None else int(project.get("grid_size", 40))
     mesh = None
     if mesh_choice not in (None, "grid"):
         paths = discover_meshes()
@@ -71,7 +82,16 @@ def main(argv: list[str] | None = None) -> None:
             raise KeyError(f"unknown mesh {mesh_choice}; choices: {sorted(paths)}")
         mesh = load_ring_mesh(paths[mesh_choice], mesh_choice)
 
-    arrays = generate_augmented_dataset(model, waveform, augmentation, mesh=mesh, grid_size=grid_size)
+    def _report(done: int, total: int) -> None:
+        # Single rewritten line so logs stay readable for large batches.
+        print(f"\rsimulating beat {done:,}/{total:,}", end="", file=sys.stderr, flush=True)
+        if done == total:
+            print(file=sys.stderr)
+
+    arrays = generate_augmented_dataset(
+        model, waveform, augmentation, mesh=mesh, grid_size=grid_size, progress=_report
+    )
+    print("writing NPZ…", file=sys.stderr, flush=True)
     output = export_npz(args.out, arrays)
     shape = arrays["delta_sigma"].shape
     print(f"{output.resolve()}  ->  {shape[0]} samples x {shape[1]} frames x {shape[2]} elements")

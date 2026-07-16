@@ -32,7 +32,7 @@ def build_project(
     waveform: WaveformSpec,
     *,
     mesh: str | None = None,
-    grid_size: int = 96,
+    grid_size: int = 40,  # matches the img_size the bundled ring meshes were mapped with
     augmentation: AugmentationSpec | None = None,
 ) -> dict[str, Any]:
     """Assemble a serializable project dict from live objects."""

@@ -18,7 +18,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=Path("configs/default_finger.json"))
     parser.add_argument("--mesh", default="grid", help="grid or bundled mesh folder name")
-    parser.add_argument("--grid-size", type=int, default=96)
+    parser.add_argument("--grid-size", type=int, default=40, help="image resolution in pixels per side")
     parser.add_argument("--waveform", choices=["heartbeat", "sine"], default="heartbeat")
     parser.add_argument("--frames", type=int, default=50)
     parser.add_argument("--duration", type=float, default=1.0)

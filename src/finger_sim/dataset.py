@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict
 import json
 
@@ -19,15 +20,21 @@ def generate_augmented_dataset(
     augmentation: AugmentationSpec,
     *,
     mesh: RingMesh | None = None,
-    grid_size: int = 96,
+    grid_size: int = 40,  # matches the img_size the bundled ring meshes were mapped with
+    progress: Callable[[int, int], None] | None = None,
 ) -> dict[str, np.ndarray]:
-    """Return a v2 NPZ payload whose first dimension is augmented sample."""
+    """Return a v2 NPZ payload whose first dimension is augmented sample.
+
+    ``progress`` is called with (completed, total) after each sample so callers can
+    report how far a long batch has run.
+    """
     augmentation.validate()
     rng = np.random.default_rng(augmentation.seed)
     results = []
     models = []
     waveforms = []
-    for _ in range(augmentation.samples):
+    total = augmentation.samples
+    for index in range(total):
         model = augment_model(baseline_model, augmentation, rng)
         waveform = augment_waveform(baseline_waveform, augmentation, rng)
         if mesh is None:
@@ -37,6 +44,8 @@ def generate_augmented_dataset(
         results.append(result)
         models.append(model)
         waveforms.append(waveform)
+        if progress is not None:
+            progress(index + 1, total)
 
     delta = np.stack([r.delta_sigma for r in results]).astype(np.float32)
     rest = np.stack([r.sigma_baseline for r in results]).astype(np.float32)

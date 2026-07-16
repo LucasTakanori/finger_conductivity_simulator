@@ -1,11 +1,10 @@
-"""Mesh projection and single/batch GCNM conductivity export."""
+"""Conductivity image export: one beat or a reproducible augmented batch."""
 
 from __future__ import annotations
 
 from pathlib import Path
 import sys
 
-import numpy as np
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -15,60 +14,51 @@ from finger_sim.augmentation import AugmentationSpec  # noqa: E402
 from finger_sim.dataset import generate_augmented_dataset  # noqa: E402
 from finger_sim.export import arrays_for_export, export_bytes  # noqa: E402
 from finger_sim import project as project_io  # noqa: E402
-from finger_sim.mesh import mesh_points_mm  # noqa: E402
-from finger_sim.simulation import simulate_grid, simulate_points  # noqa: E402
+from finger_sim.simulation import simulate_grid  # noqa: E402
 
 ui.page_header(
     "Step 03",
-    "Mesh projection and dataset export",
-    "Project absolute or delta conductivity onto a real PVI FEM mesh, then export either "
-    "the current beat or a reproducible batch of randomized anatomies and waveforms.",
+    "Conductivity image export",
+    "Export the conductivity as a regular image on a Cartesian grid — one beat, or a "
+    "reproducible batch of randomized anatomies and waveforms. A FEM mesh can be drawn "
+    "on top for reference; it does not change what is exported.",
 )
 
 model = state.get_model()
 spec = state.get_waveform()
 
-mesh_names = list(state.mesh_catalog())
-default_mesh = mesh_names.index("subject006_US120") + 1 if "subject006_US120" in mesh_names else 0
-controls = st.columns([2, 2, 1, 1])
-target = controls[0].selectbox("Sampling mesh", ["Cartesian grid", *mesh_names], index=default_mesh)
-view = controls[1].selectbox("Conductivity", ["Delta conductivity Δσ", "Absolute conductivity σ"])
+controls = st.columns([2, 2, 1, 1, 1])
+view = controls[0].selectbox("Conductivity", ["Delta conductivity Δσ", "Absolute conductivity σ"])
+resolution = controls[1].select_slider(
+    "Image resolution (pixels per side)", [40, 48, 64, 80, 96, 112, 128], value=40,
+    help="The exported image is this many pixels square. 40×40 matches the img_size the "
+    "bundled ring meshes were mapped with.",
+)
 frame = controls[2].slider("Time frame", 0, spec.frames - 1, 0)
-show_edges = controls[3].checkbox("Show mesh", value=True)
+overlay_names = ["No mesh overlay", *state.mesh_catalog().keys()]
+overlay_choice = controls[3].selectbox("FEM mesh overlay", overlay_names)
+overlay = None if overlay_choice == overlay_names[0] else overlay_choice
+animate = controls[4].toggle("▶ Animate", value=False, help="Play the whole beat in place.")
 
-mesh = None
-mesh_id = None
-mesh_manifest = None
-if target == "Cartesian grid":
-    result = simulate_grid(model, spec, 112)
-    values = result.delta_sigma[frame] if view.startswith("Delta") else result.sigma_dynamic[frame]
-    title = f"{view} · t={result.time_s[frame]:.3f} s"
-    st.plotly_chart(
-        figures.conductivity_figure(result, values, title, delta=view.startswith("Delta"), height=650),
-        use_container_width=True,
-    )
+result = simulate_grid(model, spec, int(resolution))
+mesh_overlay = state.mesh_overlay_payload(overlay, model) if overlay else None
+if animate:
+    preview = figures.conductivity_beat_figure(result, view, mesh_overlay=mesh_overlay, height=650)
 else:
-    mesh = state.load_mesh(target)
-    result = simulate_points(mesh_points_mm(mesh, model), model, spec)
-    mesh_id = mesh.mesh_id
-    mesh_manifest = mesh.manifest
-    if view.startswith("Delta"):
-        values = result.delta_sigma[frame]
-        vlim = float(np.nanmax(np.abs(result.delta_sigma)))
-        is_delta = True
-    else:
-        values = result.sigma_dynamic[frame]
-        vlim = None
-        is_delta = False
-    title = f"{target} · {view} · t={result.time_s[frame]:.3f} s"
-    st.plotly_chart(
-        figures.mesh_field_figure(mesh, model, values, title, is_delta, vlim=vlim, show_edges=show_edges),
-        use_container_width=True,
+    values = result.delta_sigma[frame] if view.startswith("Delta") else result.sigma_dynamic[frame]
+    preview = figures.conductivity_figure(
+        result,
+        values,
+        f"{view} · t={result.time_s[frame]:.3f} s · {resolution}×{resolution} image",
+        delta=view.startswith("Delta"),
+        mesh_overlay=mesh_overlay,
+        height=650,
     )
-    status = mesh_manifest.get("selection", {}).get("status", "bundled")
+st.plotly_chart(preview, use_container_width=True)
+if overlay:
     st.info(
-        f"{target}: {len(mesh.elements):,} inverse elements · provenance: {status}. "
-        "Dark triangle edges show exactly where conductivity is sampled."
+        f"{overlay} is drawn for reference only. The export stays a {resolution}×{resolution} "
+        "conductivity image — projecting onto the FEM mesh is a later step."
     )
 
 single_tab, batch_tab, session_tab = st.tabs(
@@ -76,28 +66,45 @@ single_tab, batch_tab, session_tab = st.tabs(
 )
 
 with single_tab:
-    arrays = arrays_for_export(result, model, spec, mesh_id=mesh_id, mesh_manifest=mesh_manifest)
+    arrays = arrays_for_export(result, model, spec, mesh_id=None, mesh_manifest=None)
     st.download_button(
         "Download current simulation NPZ",
         export_bytes(arrays),
-        file_name=f"finger_{mesh_id or 'grid'}_{spec.frames}frames.npz",
+        file_name=f"finger_image{resolution}_{spec.frames}frames.npz",
         mime="application/octet-stream",
         type="primary",
     )
     st.markdown(
-        "**What this saves:** one finger and one beat at 50 kHz. `delta_sigma` is the clean "
-        "GCNM target Δσ; `absolute_conductivity` is σ₀+Δσ at every frame; "
-        "`resting_absolute_conductivity` is σ₀; `waveform`, `time_s`, tissue labels, coordinates, "
-        "mesh provenance, and the complete finger model are included. Compatibility keys used by "
-        "the existing 2D_GCNM loader are retained."
+        f"**What this saves:** one finger and one beat at 50 kHz, as a "
+        f"{resolution}×{resolution} image. `delta_sigma` is the clean GCNM target Δσ; "
+        "`absolute_conductivity` is σ₀+Δσ at every frame; `resting_absolute_conductivity` is σ₀; "
+        "`waveform`, `time_s`, tissue labels, pixel coordinates, and the complete finger model "
+        "are included. Compatibility keys used by the existing 2D_GCNM loader are retained."
     )
 
 with batch_tab:
     st.markdown("#### Generate different beats and different finger anatomies")
+    st.caption(
+        f"One sample is one complete beat plus its own anatomy. With the current "
+        f"{spec.frames}-frame beat the export is shaped "
+        f"(samples × {spec.frames} frames × conductivity elements)."
+    )
     first = st.columns(3)
-    samples = first[0].number_input("Samples", 2, 10_000, 1000, 1)
+    samples = first[0].number_input(
+        "Samples (distinct beats)",
+        2,
+        10_000,
+        1000,
+        1,
+        help="One sample = one complete beat with its own finger anatomy. Each beat "
+        "contains the frames-per-beat set on the Waveform page, so 1000 samples of a "
+        "50-frame beat is 50,000 conductivity fields.",
+    )
     seed = first[1].number_input("Random seed", 0, 10_000_000, 0, 1)
-    finger_pct = first[2].slider("Finger size variation (%)", 0, 25, 8, 1)
+    finger_pct = first[2].slider(
+        "Finger size variation (%)", 0, 25, 8, 1,
+        help="Set to 0 to keep one fixed finger size and vary only the beats and arteries.",
+    )
 
     anatomy = st.columns(4)
     artery_size_pct = anatomy[0].slider("Artery size variation (%)", 0, 50, 20, 1)
@@ -126,19 +133,27 @@ with batch_tab:
     )
 
     if st.button("Generate augmented dataset", type="primary", use_container_width=True):
-        with st.spinner(f"Generating {samples} distinct simulations…"):
-            batch = generate_augmented_dataset(model, spec, augmentation, mesh=mesh, grid_size=96)
+        bar = st.progress(0.0, text=f"Simulating beat 0 of {samples}…")
+
+        def _report(done: int, total: int) -> None:
+            bar.progress(done / total, text=f"Simulating beat {done:,} of {total:,}…")
+
+        batch = generate_augmented_dataset(
+            model, spec, augmentation, mesh=None, grid_size=int(resolution), progress=_report
+        )
+        with st.spinner("Compressing the NPZ…"):
             st.session_state["augmented_dataset_bytes"] = export_bytes(batch)
-            st.session_state["augmented_dataset_name"] = (
-                f"finger_augmented_{mesh_id or 'grid'}_{samples}samples_seed{seed}.npz"
-            )
-            st.session_state["augmented_dataset_shape"] = tuple(batch["delta_sigma"].shape)
+        st.session_state["augmented_dataset_name"] = (
+            f"finger_augmented_image{resolution}_{samples}samples_seed{seed}.npz"
+        )
+        st.session_state["augmented_dataset_shape"] = tuple(batch["delta_sigma"].shape)
+        bar.empty()
 
     if "augmented_dataset_bytes" in st.session_state:
         shape = st.session_state["augmented_dataset_shape"]
         st.success(
             f"Dataset ready: {shape[0]} different samples × {shape[1]} frames × "
-            f"{shape[2]:,} conductivity elements."
+            f"{shape[2]:,} pixels."
         )
         st.download_button(
             "Download augmented dataset NPZ",
@@ -159,9 +174,9 @@ with batch_tab:
 with session_tab:
     st.markdown("#### Save this model + waveform as a reusable project")
     st.markdown(
-        "A project file captures the current finger model, the selected waveform, the sampling "
-        "mesh, and the augmentation settings shown in the **Augmented GCNM dataset** tab. Hand it "
-        "to the headless generator to build a dataset with no interface at all:"
+        "A project file captures the current finger model, the selected waveform, the image "
+        "resolution, and the augmentation settings shown in the **Augmented GCNM dataset** tab. "
+        "Hand it to the headless generator to build a dataset with no interface at all:"
     )
     st.code(
         "finger-sim-dataset --project finger_session.json --samples 1000 --seed 0 \\\n"
@@ -171,8 +186,8 @@ with session_tab:
     project = project_io.build_project(
         model,
         spec,
-        mesh=(None if target == "Cartesian grid" else target),
-        grid_size=96,
+        mesh=None,  # export the conductivity image; FEM projection comes later
+        grid_size=int(resolution),
         augmentation=augmentation,
     )
     st.download_button(
