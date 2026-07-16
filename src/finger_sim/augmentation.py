@@ -18,10 +18,12 @@ class AugmentationSpec:
     samples: int = 10
     seed: int = 0
     finger_size_fraction: float = 0.08
+    finger_rotation_deg: float = 10.0
     artery_size_fraction: float = 0.20
     artery_position_mm: float = 1.0
     artery_rotation_deg: float = 15.0
     conductivity_fraction: float = 0.10
+    diffusion_fraction: float = 0.15
     waveform_shape_fraction: float = 0.12
     duration_fraction: float = 0.08
 
@@ -51,6 +53,19 @@ def augment_model(
     layer_scale = min(sx, sy)
     data["skin_thickness_mm"] *= layer_scale
     data["fat_thickness_mm"] *= layer_scale
+
+    # Ring rotation: the finger sits at a different angle inside the electrode ring.
+    data["rotation_deg"] += float(
+        rng.uniform(-spec.finger_rotation_deg, spec.finger_rotation_deg)
+    )
+
+    # Muscle pulse-diffusion strength and reach vary from beat to beat.
+    data["muscle_diffusion_fraction"] = float(
+        np.clip(data["muscle_diffusion_fraction"] * _factor(rng, spec.diffusion_fraction), 0.0, 1.0)
+    )
+    data["muscle_diffusion_length_mm"] = max(
+        1e-3, data["muscle_diffusion_length_mm"] * _factor(rng, spec.diffusion_fraction)
+    )
 
     embedded = [data["bone"], *data.get("ligaments", []), *data["arteries"]]
     for item in embedded:

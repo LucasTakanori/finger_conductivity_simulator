@@ -25,10 +25,12 @@ def main() -> None:
     parser.add_argument("--samples", type=int, default=1, help="augmented samples in one NPZ")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--finger-size-variation", type=float, default=0.08)
+    parser.add_argument("--finger-rotation-deg", type=float, default=10.0)
     parser.add_argument("--artery-size-variation", type=float, default=0.20)
     parser.add_argument("--artery-position-mm", type=float, default=1.0)
     parser.add_argument("--artery-rotation-deg", type=float, default=15.0)
     parser.add_argument("--conductivity-variation", type=float, default=0.10)
+    parser.add_argument("--diffusion-variation", type=float, default=0.15)
     parser.add_argument("--waveform-shape-variation", type=float, default=0.12)
     parser.add_argument("--duration-variation", type=float, default=0.08)
     parser.add_argument("--out", type=Path, required=True)
@@ -52,10 +54,12 @@ def main() -> None:
             samples=args.samples,
             seed=args.seed,
             finger_size_fraction=args.finger_size_variation,
+            finger_rotation_deg=args.finger_rotation_deg,
             artery_size_fraction=args.artery_size_variation,
             artery_position_mm=args.artery_position_mm,
             artery_rotation_deg=args.artery_rotation_deg,
             conductivity_fraction=args.conductivity_variation,
+            diffusion_fraction=args.diffusion_variation,
             waveform_shape_fraction=args.waveform_shape_variation,
             duration_fraction=args.duration_variation,
         )

@@ -20,6 +20,7 @@ dev = ["pytest>=8"]
 
 [project.scripts]
 finger-sim-export = "finger_sim.cli:main"
+finger-sim-dataset = "finger_sim.dataset_cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
