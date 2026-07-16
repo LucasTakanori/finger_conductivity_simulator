@@ -22,10 +22,11 @@ def pages() -> dict:
         "hub": st.Page(str(_VIEWS / "hub.py"), title="Home", icon="🩻", default=True),
         "finger": st.Page(str(_VIEWS / "finger_model.py"), title="Finger model", icon="🖐️"),
         "waveform": st.Page(str(_VIEWS / "waveform.py"), title="Waveform", icon="🫀"),
-        "mesh": st.Page(str(_VIEWS / "mesh_export.py"), title="Mesh & export", icon="🧮"),
+        "mesh": st.Page(str(_VIEWS / "mesh_export.py"), title="Image export", icon="🧮"),
+        "viewer": st.Page(str(_VIEWS / "dataset_viewer.py"), title="Dataset viewer", icon="🎞️"),
     }
 
 
 def ordered() -> list:
     p = pages()
-    return [p["hub"], p["finger"], p["waveform"], p["mesh"]]
+    return [p["hub"], p["finger"], p["waveform"], p["mesh"], p["viewer"]]

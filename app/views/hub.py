@@ -47,11 +47,12 @@ st.write("")
 st.markdown("#### Tools")
 pages = nav.pages()
 cards = [
-    ("01", "Finger model", "Drag tissues to reshape, scale to a ring size, watch conductivity update live.", pages["finger"]),
-    ("02", "Waveform", "Shape the heartbeat/sine/custom pulse and animate the differential conductivity.", pages["waveform"]),
-    ("03", "Mesh & export", "Project onto a PVI ring mesh, see the triangles, export a GCNM-ready NPZ.", pages["mesh"]),
+    ("01", "Finger model", "Edit tissue and artery geometry and 50 kHz conductivity, with live maps.", pages["finger"]),
+    ("02", "Waveform", "Shape the heartbeat/sine/custom pulse and replay the conductivity.", pages["waveform"]),
+    ("03", "Image export", "Export the conductivity image — one beat, or a reproducible augmented batch.", pages["mesh"]),
+    ("04", "Dataset viewer", "Reopen an exported NPZ: browse samples and beats, save frames and GIFs.", pages["viewer"]),
 ]
-for col, (idx, name, desc, page) in zip(st.columns(3), cards):
+for col, (idx, name, desc, page) in zip(st.columns(len(cards)), cards):
     with col:
         st.page_link(page, label=f"{idx} · {name} →", help=desc, use_container_width=True)
         st.caption(desc)
