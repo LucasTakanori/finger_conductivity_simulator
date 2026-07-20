@@ -84,6 +84,14 @@ with single_tab:
 
 with batch_tab:
     st.markdown("#### Generate different beats and different finger anatomies")
+    preset = st.selectbox(
+        "Dataset preset",
+        ["Custom", "US120 GCNM source pack · 1,000 beats × 50 samples"],
+        help="This offline preset creates the conductivity source used before the PVI FEM voltage/HP/LP step.",
+    )
+    pilot_preset = preset.startswith("US120")
+    if pilot_preset and spec.frames != 50:
+        st.warning("Set the Waveform page to exactly 50 samples per beat before exporting the US120 preset.")
     st.caption(
         f"One sample is one complete beat plus its own anatomy. With the current "
         f"{spec.frames}-frame beat the export is shaped "
@@ -94,13 +102,13 @@ with batch_tab:
         "Samples (distinct beats)",
         2,
         10_000,
-        1000,
+        1000 if pilot_preset else 1000,
         1,
         help="One sample = one complete beat with its own finger anatomy. Each beat "
         "contains the frames-per-beat set on the Waveform page, so 1000 samples of a "
         "50-frame beat is 50,000 conductivity fields.",
     )
-    seed = first[1].number_input("Random seed", 0, 10_000_000, 0, 1)
+    seed = first[1].number_input("Random seed", 0, 10_000_000, 20260719 if pilot_preset else 0, 1)
     finger_pct = first[2].slider(
         "Finger size variation (%)", 0, 25, 8, 1,
         help="Set to 0 to keep one fixed finger size and vary only the beats and arteries.",
@@ -147,6 +155,7 @@ with batch_tab:
             f"finger_augmented_image{resolution}_{samples}samples_seed{seed}.npz"
         )
         st.session_state["augmented_dataset_shape"] = tuple(batch["delta_sigma"].shape)
+        st.session_state["augmented_dataset_has_hp_lp"] = bool(pilot_preset)
         bar.empty()
 
     if "augmented_dataset_bytes" in st.session_state:
@@ -163,6 +172,12 @@ with batch_tab:
             type="primary",
             use_container_width=True,
         )
+        if st.session_state.get("augmented_dataset_has_hp_lp"):
+            st.info(
+                "This NPZ includes `delta_sigma_hp` and `delta_sigma_lp` as conductivity-source "
+                "components. It is not electrode voltage; run the PVI forward FEM and then "
+                "apply ΔV = −IΔR before training voltage-domain GCNMs."
+            )
 
     st.caption(
         "Each sample independently perturbs finger width/height, ring rotation, artery size, "

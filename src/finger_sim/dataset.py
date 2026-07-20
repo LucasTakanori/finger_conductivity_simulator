@@ -14,6 +14,21 @@ from finger_sim.models import FingerModel, WaveformSpec
 from finger_sim.simulation import simulate_grid, simulate_points
 
 
+def _moving_mean(values: np.ndarray, window: int = 100) -> np.ndarray:
+    """MATLAB-style shortened-end moving mean along the beat-frame axis."""
+    values = np.asarray(values, dtype=np.float64)
+    n = values.shape[1]
+    index = np.arange(n)
+    left = window // 2
+    right = window - left - 1
+    starts = np.maximum(index - left, 0)
+    stops = np.minimum(index + right + 1, n)
+    prefix = np.concatenate((np.zeros((*values.shape[:1], 1, values.shape[2])),
+                             np.cumsum(values, axis=1)), axis=1)
+    totals = prefix[:, stops, :] - prefix[:, starts, :]
+    return totals / (stops - starts)[None, :, None]
+
+
 def generate_augmented_dataset(
     baseline_model: FingerModel,
     baseline_waveform: WaveformSpec,
@@ -50,9 +65,14 @@ def generate_augmented_dataset(
     delta = np.stack([r.delta_sigma for r in results]).astype(np.float32)
     rest = np.stack([r.sigma_baseline for r in results]).astype(np.float32)
     absolute = np.stack([r.sigma_dynamic for r in results]).astype(np.float32)
+    # These are conductivity-source components.  The PVI-compatible voltage
+    # components are obtained only after the external FEM forward solve.
+    lp = _moving_mean(absolute - rest[:, None, :], window=100).astype(np.float32)
+    hp = (absolute - rest[:, None, :] - lp).astype(np.float32)
     metadata = {
         "schema_version": "finger-conductivity-v2-batch",
         "target": "clean delta conductivity, not a PVI/Newton reconstruction",
+        "temporal_components": "delta_sigma_hp/lp are source conductivity components; FEM voltage HP/LP is downstream",
         "frequency_hz": baseline_model.frequency_hz,
         "coordinate_units": "mm",
         "conductivity_units": "S/m",
@@ -78,6 +98,8 @@ def generate_augmented_dataset(
         "delta_sigma": delta,
         "absolute_conductivity": absolute,
         "resting_absolute_conductivity": rest,
+        "delta_sigma_hp": hp,
+        "delta_sigma_lp": lp,
         # Compatibility names used by the existing 2D_GCNM adapter.
         "sigma": delta,
         "sigma_dynamic": absolute,
